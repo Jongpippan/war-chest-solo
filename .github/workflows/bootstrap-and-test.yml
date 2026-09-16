@@ -1,0 +1,39 @@
+name: Bootstrap and test
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Restore large TypeScript sources
+        if: ${{ hashFiles('.bootstrap/engine.ts.gz.b64') != '' }}
+        run: |
+          mkdir -p src
+          base64 -d .bootstrap/engine.ts.gz.b64 | gunzip > src/engine.ts
+          base64 -d .bootstrap/main.ts.gz.b64 | gunzip > src/main.ts
+      - name: Install TypeScript
+        run: npm install --no-package-lock
+      - name: Run tests
+        run: npm test
+      - name: Run bot simulation
+        run: node test/simulate.mjs
+      - name: Commit restored sources and build output
+        if: ${{ hashFiles('.bootstrap/engine.ts.gz.b64') != '' }}
+        run: |
+          rm -rf .bootstrap
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'feat: add playable War Chest Solo v0.2'
+          git push
