@@ -18,14 +18,24 @@ function closeUnitTooltip() {
     tooltip.classList.remove('visible');
     tooltip.hidden = true;
 }
-function onPointerDownCapture() {
+function isGameplayActionTarget(target) {
+    return target instanceof Element && Boolean(target.closest('[data-board-key], [data-proxy-board-key]'));
+}
+function onPointerDownCapture(event) {
     if (!isMobileUi())
         return;
     tooltipVisibleAtPointerDown = Boolean(visibleUnitTooltip());
+    if (isGameplayActionTarget(event.target) && tooltipVisibleAtPointerDown)
+        closeUnitTooltip();
 }
 function onClickCapture(event) {
     if (!isMobileUi())
         return;
+    if (isGameplayActionTarget(event.target)) {
+        tooltipVisibleAtPointerDown = false;
+        closeUnitTooltip();
+        return;
+    }
     const shouldDismissTooltip = tooltipVisibleAtPointerDown && Boolean(visibleUnitTooltip());
     tooltipVisibleAtPointerDown = false;
     if (!shouldDismissTooltip)
