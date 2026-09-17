@@ -21,6 +21,17 @@ function closeUnitTooltip() {
 function isGameplayActionTarget(target) {
     return target instanceof Element && Boolean(target.closest('[data-board-key], [data-proxy-board-key]'));
 }
+function onMouseEnterCapture(event) {
+    if (!isMobileUi())
+        return;
+    const target = event.target;
+    if (!(target instanceof Element))
+        return;
+    if (!target.closest('.unit-token[data-board-key]'))
+        return;
+    event.stopImmediatePropagation();
+    closeUnitTooltip();
+}
 function onPointerDownCapture(event) {
     if (!isMobileUi())
         return;
@@ -179,6 +190,7 @@ function onGeneratedActionClick(event) {
     source.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
 }
 function startResponsiveUi() {
+    document.addEventListener('mouseenter', onMouseEnterCapture, true);
     document.addEventListener('pointerdown', onPointerDownCapture, true);
     document.addEventListener('click', onClickCapture, true);
     document.addEventListener('click', onGeneratedActionClick);
