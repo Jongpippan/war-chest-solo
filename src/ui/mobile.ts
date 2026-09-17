@@ -29,6 +29,20 @@ function isGameplayActionTarget(target: EventTarget | null): boolean {
   return target instanceof Element && Boolean(target.closest('[data-board-key], [data-proxy-board-key]'));
 }
 
+function onMouseEnterCapture(event: MouseEvent): void {
+  if (!isMobileUi()) return;
+  const target = event.target;
+  if (!(target instanceof Element)) return;
+  if (!target.closest('.unit-token[data-board-key]')) return;
+
+  // Touch browsers and Playwright may synthesize mouseenter immediately before a
+  // tap. The generic Unit hover listener would then open the full-screen mobile
+  // tooltip on top of the battlefield and steal the actual Unit tap. Actionable
+  // battlefield Units use tap for gameplay, so suppress that synthetic hover.
+  event.stopImmediatePropagation();
+  closeUnitTooltip();
+}
+
 function onPointerDownCapture(event: PointerEvent): void {
   if (!isMobileUi()) return;
   tooltipVisibleAtPointerDown = Boolean(visibleUnitTooltip());
@@ -197,6 +211,7 @@ function onGeneratedActionClick(event: MouseEvent): void {
 }
 
 function startResponsiveUi(): void {
+  document.addEventListener('mouseenter', onMouseEnterCapture, true);
   document.addEventListener('pointerdown', onPointerDownCapture, true);
   document.addEventListener('click', onClickCapture, true);
   document.addEventListener('click', onGeneratedActionClick);
