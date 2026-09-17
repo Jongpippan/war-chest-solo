@@ -163,7 +163,9 @@ function onGeneratedActionClick(event) {
         return;
     const source = Array.from(document.querySelectorAll('[data-board-key]'))
         .find((candidate) => candidate.dataset.boardKey === key && candidate.closest('.unit-action-popover'));
-    source?.click();
+    if (!source)
+        return;
+    source.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
 }
 function startMobileUi() {
     document.addEventListener('pointerdown', onPointerDownCapture, true);
