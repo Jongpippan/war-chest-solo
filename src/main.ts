@@ -778,7 +778,12 @@ function renderDiscardZone(id: PlayerId, actions: ActionCandidate[] = []): strin
   const pass = id === 'human' ? actions.find((a) => a.kind === 'PASS') : undefined;
   const tag = pass ? 'button' : 'div';
   const attrs = pass ? ' type="button" data-pass-action="1" aria-label="Pass with selected Coin"' : '';
-  return `<${tag}${attrs} class="resource-zone discard-zone ${pass ? 'face-down-action actionable' : ''}"><div class="resource-label"><span>DISCARD</span><b>${p.discard.length}</b></div><div class="discard-stack">${coins || '<span class="empty-zone">EMPTY</span>'}${p.discard.length > 6 ? `<span class="more-count">+${p.discard.length - 6}</span>` : ''}</div><div class="discard-legend"><span>UP ${up}</span><span>DOWN ${down}</span></div>${pass ? `<span class="zone-action-tag">${gameTerm('Pass')}</span>` : ''}</${tag}>`;
+  return `<${tag}${attrs} class="resource-zone discard-zone ${pass ? 'face-down-action actionable' : ''}">
+    <div class="discard-title"><span>DISCARD</span><b>${p.discard.length}</b></div>
+    <div class="discard-stack">${coins || '<span class="empty-zone">EMPTY</span>'}${p.discard.length > 6 ? `<span class="more-count">+${p.discard.length - 6}</span>` : ''}</div>
+    <div class="discard-counts"><span>FACE-UP <b>${up}</b></span><span>FACE-DOWN <b>${down}</b></span></div>
+    ${pass ? `<span class="zone-action-tag">${gameTerm('Pass')}</span>` : ''}
+  </${tag}>`;
 }
 
 
@@ -793,9 +798,10 @@ function renderSupplyCard(type: UnitType, owner: PlayerId, actions: ActionCandid
   const recruit = owner === 'human' ? actions.find((a) => a.kind === 'RECRUIT' && a.payload.recruitType === type) : undefined;
   const tag = recruit ? 'button' : 'article';
   const attrs = recruit ? ` type="button" data-recruit-type="${type}" aria-label="Recruit ${esc(d.name)}"` : '';
-  return `<${tag}${attrs} class="supply-card ${recruit ? 'actionable recruit-action' : ''}" style="--accent:${d.accent}" data-unit-type="${type}" data-owner-label="${owner === 'human' ? 'Your Unit' : 'Bot Unit'}" data-supply="${supply}" data-board="${boardStrength}" data-removed="${removed}">
-    <div class="supply-card-head"><span class="supply-icon">${unitIconSvg(type)}</span><span class="supply-name"><strong>${esc(d.name)}</strong><small>${esc(d.ko)}</small></span><b class="supply-total">×${d.coinCount}</b></div>
-    <div class="supply-card-foot"><div class="supply-stack" aria-label="Supply ${supply}">${stackCoins || '<span class="supply-empty">0</span>'}</div><div class="supply-stats"><span>SUPPLY <b>${supply}</b></span><span>BOARD <b>${boardStrength}</b></span><span>OUT <b>${removed}</b></span></div></div>
+  return `<${tag}${attrs} class="supply-card supply-row ${recruit ? 'actionable recruit-action' : ''}" style="--accent:${d.accent}" data-unit-type="${type}" data-owner-label="${owner === 'human' ? 'Your Unit' : 'Bot Unit'}" data-supply="${supply}" data-board="${boardStrength}" data-removed="${removed}">
+    <div class="supply-identity"><span class="supply-icon">${unitIconSvg(type)}</span><span class="supply-name"><strong>${esc(d.name)}</strong><small>${esc(d.ko)}</small></span></div>
+    <div class="supply-stack-wrap"><div class="supply-stack" aria-label="Supply ${supply}">${stackCoins || '<span class="supply-empty">EMPTY</span>'}</div><b class="supply-count">${supply}</b></div>
+    <div class="supply-stats"><span><small>BOARD</small><b>${boardStrength}</b></span><span><small>OUT</small><b>${removed}</b></span><span><small>TOTAL</small><b>${d.coinCount}</b></span></div>
     ${recruit ? `<span class="supply-action-tag">${gameTerm('Recruit')}</span>` : ''}
   </${tag}>`;
 }
@@ -813,7 +819,7 @@ function renderPlayerPanel(id: PlayerId, actions: ActionCandidate[] = []): strin
     </div>
     ${renderControlMarkers(id)}
     <div class="resource-table">${renderHandZone(id)}${renderBagZone(id)}${renderDiscardZone(id, actions)}</div>
-    <div class="supply-heading"><span>UNIT SUPPLY</span><small>${id === 'human' ? 'Click a highlighted Supply stack to Recruit' : 'Public information'}</small></div>
+    <div class="supply-heading"><span>UNIT SUPPLY</span><small>${id === 'human' ? 'Select a highlighted row to Recruit' : 'PUBLIC'}</small></div>
     <div class="supply-grid">${p.units.map((u) => renderSupplyCard(u, id, actions)).join('')}</div>
   </section>`;
 }
@@ -967,16 +973,14 @@ function hexPoints(cx: number, cy: number, size = 34): string {
   return pts.join(' ');
 }
 
-function inactiveCluster(cx: number, cy: number, size = 28): string {
-  const offsets = [
-    [0, 0], [0, -1], [0, 1], [-1, 0], [1, 0],
-  ];
-  const pts = offsets.map(([q, r]) => {
-    const x = cx + size * 1.5 * q;
-    const y = cy + size * Math.sqrt(3) * (r + q / 2);
-    return `<polygon points="${hexPoints(x, y, size - 2)}" fill="rgba(215,114,95,.55)" stroke="rgba(144,77,63,.45)" stroke-width="1.5"/>`;
-  }).join('');
-  return `<g class="inactive-cluster">${pts}</g>`;
+function fourPlayerWing(side: 'left' | 'right'): string {
+  const ids: HexId[] = side === 'left'
+    ? ['-4,1', '-5,2', '-4,2', '-5,3', '-4,3']
+    : ['4,-3', '5,-3', '4,-2', '5,-2', '4,-1'];
+  return `<g class="inactive-cluster four-player-wing ${side}">${ids.map((id) => {
+    const { x, y } = axialToPixel(id);
+    return `<polygon points="${hexPoints(x, y, 34)}" fill="#a79578" stroke="#8f7c60" stroke-width="1.8"/>`;
+  }).join('')}</g>`;
 }
 
 
@@ -1056,8 +1060,8 @@ function renderBoardSvg(actions: ActionCandidate[] = []): string {
     <rect x="68" y="118" width="824" height="444" rx="18" fill="#efe1bb" opacity=".28"/>
     <polygon points="260,86 700,86 860,240 860,438 700,592 260,592 100,438 100,240" fill="#f3e3b8" stroke="#d2b57a" stroke-width="4"/>
     <polygon points="300,126 660,126 812,250 812,428 660,552 300,552 148,428 148,250" fill="#ecd9ab" stroke="#d4b77b" stroke-width="2.5"/>
-    ${inactiveCluster(221, 338, 31)}
-    ${inactiveCluster(739, 338, 31)}
+    ${fourPlayerWing('left')}
+    ${fourPlayerWing('right')}
     <rect x="435" y="70" width="90" height="28" rx="8" fill="#a8a5a9" opacity=".42"/>
     <rect x="435" y="578" width="90" height="28" rx="8" fill="#a8a5a9" opacity=".42"/>
     ${hexes}

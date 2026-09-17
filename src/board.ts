@@ -58,15 +58,15 @@ export function stepInDirection(start: HexId, directionIndex: number, steps: num
 // Two-player base-game layout. The playable area is the 37 light central hexes.
 // The five darker hexes on each far side are four-player-only and are not part of BOARD_HEXES.
 // Axial coordinates are oriented with BOT at the top and HUMAN at the bottom, matching the official 2-player setup diagram.
-export const BOT_STARTS: HexId[] = [hexId(0, -2), hexId(2, -2)];
-export const HUMAN_STARTS: HexId[] = [hexId(-2, 2), hexId(0, 2)];
+export const BOT_STARTS: HexId[] = [hexId(-1, -2), hexId(2, -3)];
+export const HUMAN_STARTS: HexId[] = [hexId(1, 2), hexId(-2, 3)];
 export const NEUTRAL_LOCATIONS: HexId[] = [
-  hexId(-1, -1),
   hexId(1, -1),
-  hexId(3, -1),
-  hexId(-3, 1),
   hexId(-1, 1),
-  hexId(1, 1),
+  hexId(-2, 0),
+  hexId(2, 0),
+  hexId(3, -2),
+  hexId(-3, 2),
 ];
 export const ALL_LOCATIONS = [...HUMAN_STARTS, ...BOT_STARTS, ...NEUTRAL_LOCATIONS];
 

@@ -122,3 +122,10 @@ test('deploy destinations are controlled locations', () => {
     assert.equal(state.locations[action.payload.destination], 'human');
   }
 });
+
+
+test('physical board image coordinates are used for the 2-player Locations', () => {
+  assert.deepEqual(new Set(BOT_STARTS), new Set(['-1,-2', '2,-3']));
+  assert.deepEqual(new Set(HUMAN_STARTS), new Set(['1,2', '-2,3']));
+  assert.deepEqual(new Set(NEUTRAL_LOCATIONS), new Set(['1,-1', '-1,1', '-2,0', '2,0', '3,-2', '-3,2']));
+});
