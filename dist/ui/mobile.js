@@ -1,7 +1,7 @@
 "use strict";
 const MOBILE_QUERY = '(max-width: 760px), (hover: none) and (pointer: coarse)';
 const STORAGE_KEY = 'war-chest-solo-local-v2';
-const GENERATED_ATTR = 'data-mobile-ui-generated';
+const GENERATED_ATTR = 'data-responsive-ui-generated';
 const LAST_BOT_ACTION_KEY = 'war-chest-solo-last-bot-action-v1';
 let tooltipVisibleAtPointerDown = false;
 let syncQueued = false;
@@ -9,8 +9,7 @@ function isMobileUi() {
     return window.matchMedia(MOBILE_QUERY).matches;
 }
 function visibleUnitTooltip() {
-    const tooltip = document.querySelector('#unitTooltip.visible:not([hidden])');
-    return tooltip ?? null;
+    return document.querySelector('#unitTooltip.visible:not([hidden])');
 }
 function closeUnitTooltip() {
     const tooltip = visibleUnitTooltip();
@@ -85,6 +84,9 @@ function syncBotLastAction() {
             text.textContent = next;
     }
 }
+function removeBotLastAction() {
+    document.querySelector('.mobile-bot-last-action')?.remove();
+}
 function actionLabel(source) {
     if (source.classList.contains('bolster'))
         return '증원';
@@ -94,31 +96,34 @@ function actionLabel(source) {
         return '점령';
     return source.textContent?.trim() || '행동';
 }
+function selectedActionSources() {
+    const popover = document.querySelector('.unit-action-popover');
+    if (!popover)
+        return [];
+    return Array.from(popover.querySelectorAll('.board-action-chip[data-board-key]'));
+}
 function syncUnitActionBar() {
     const hud = document.querySelector('.interaction-hud');
-    const popover = document.querySelector('.unit-action-popover');
-    const existing = document.querySelector('.mobile-unit-actions');
-    if (!hud || !popover) {
+    const existing = document.querySelector('.context-unit-actions');
+    const sources = selectedActionSources();
+    if (!hud || !sources.length) {
         existing?.remove();
         return;
     }
-    const sources = Array.from(popover.querySelectorAll('.board-action-chip[data-board-key]'));
-    if (!sources.length) {
-        existing?.remove();
-        return;
-    }
-    const signature = sources.map((source) => source.dataset.boardKey ?? '').join('|');
+    const popover = sources[0].closest('.unit-action-popover');
+    const unitId = popover?.dataset.actionFor ?? '';
+    const signature = `${unitId}:${sources.map((source) => source.dataset.boardKey ?? '').join('|')}`;
     if (existing?.dataset.signature === signature && existing.parentElement === hud)
         return;
     existing?.remove();
     const bar = document.createElement('div');
-    bar.className = 'mobile-unit-actions';
+    bar.className = 'context-unit-actions';
     bar.setAttribute(GENERATED_ATTR, 'true');
     bar.dataset.signature = signature;
     bar.setAttribute('role', 'group');
     bar.setAttribute('aria-label', '선택한 유닛 행동');
     const label = document.createElement('span');
-    label.className = 'mobile-unit-actions-label';
+    label.className = 'context-unit-actions-label';
     label.textContent = '선택 유닛';
     bar.append(label);
     for (const source of sources) {
@@ -127,47 +132,43 @@ function syncUnitActionBar() {
             continue;
         const button = document.createElement('button');
         button.type = 'button';
-        button.className = `mobile-unit-action ${source.classList.contains('bolster') ? 'bolster' : source.classList.contains('tactic') ? 'tactic' : source.classList.contains('control') ? 'control' : ''}`;
+        button.className = `context-unit-action ${source.classList.contains('bolster') ? 'bolster' : source.classList.contains('tactic') ? 'tactic' : source.classList.contains('control') ? 'control' : ''}`;
         button.dataset.proxyBoardKey = key;
         button.textContent = actionLabel(source);
         bar.append(button);
     }
     hud.append(bar);
 }
-function removeGeneratedUi() {
-    document.querySelectorAll(`[${GENERATED_ATTR}="true"]`).forEach((node) => node.remove());
-}
-function syncMobileUi() {
+function syncResponsiveUi() {
     syncQueued = false;
-    if (!isMobileUi()) {
-        removeGeneratedUi();
-        return;
-    }
     captureBotActionToast();
-    syncBotLastAction();
     syncUnitActionBar();
+    if (isMobileUi())
+        syncBotLastAction();
+    else
+        removeBotLastAction();
 }
 function queueSync() {
     if (syncQueued)
         return;
     syncQueued = true;
-    requestAnimationFrame(syncMobileUi);
+    requestAnimationFrame(syncResponsiveUi);
 }
 function onGeneratedActionClick(event) {
     const target = event.target;
     const button = target?.closest('[data-proxy-board-key]');
-    if (!button || !isMobileUi())
+    if (!button)
         return;
     const key = button.dataset.proxyBoardKey;
     if (!key)
         return;
-    const source = Array.from(document.querySelectorAll('[data-board-key]'))
-        .find((candidate) => candidate.dataset.boardKey === key && candidate.closest('.unit-action-popover'));
+    const source = selectedActionSources().find((candidate) => candidate.dataset.boardKey === key);
     if (!source)
         return;
+    event.preventDefault();
     source.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
 }
-function startMobileUi() {
+function startResponsiveUi() {
     document.addEventListener('pointerdown', onPointerDownCapture, true);
     document.addEventListener('click', onClickCapture, true);
     document.addEventListener('click', onGeneratedActionClick);
@@ -177,4 +178,4 @@ function startMobileUi() {
     window.addEventListener('storage', queueSync);
     queueSync();
 }
-startMobileUi();
+startResponsiveUi();
