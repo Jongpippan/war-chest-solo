@@ -150,7 +150,7 @@ function syncBoardUnitActionOverlay() {
         existing?.remove();
         return;
     }
-    const unit = svg.querySelector(`.unit-token[data-board-key="unit:${unitId}"]`);
+    const unit = svg.querySelector('.unit-token.interaction-selected') ?? svg.querySelector(`.unit-token[data-board-key="unit:${unitId}"]`);
     const center = unit?.querySelector('circle');
     if (!center) {
         existing?.remove();
