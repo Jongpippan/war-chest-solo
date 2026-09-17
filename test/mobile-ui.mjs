@@ -34,27 +34,30 @@ async function assertRealUnitActions(page, viewportName) {
   const unit = page.locator('.unit-token[data-unit-type="LIGHT_CAVALRY"][data-board-key]').first();
   await unit.click();
 
-  // The SVG <g> is structural interaction data. Chromium/Playwright can report
-  // an SVG group as not "visible" even while its child chips are rendered, so
-  // only require it to be attached. The user-facing HTML action bar below is
-  // still required to be actually visible.
+  // main.ts still creates the SVG action data, while the responsive layer turns
+  // it into real HTML buttons anchored directly above the selected battlefield Unit.
   await page.waitForSelector('.unit-action-popover', { state: 'attached' });
-  await page.waitForSelector('.context-unit-actions', { state: 'visible' });
+  await page.waitForSelector('.board-unit-action-overlay', { state: 'attached' });
+  await page.waitForSelector('.board-unit-action-button', { state: 'visible' });
 
-  const labels = await page.locator('.context-unit-action').allTextContents();
-  assert.ok(labels.includes('증원'), `${viewportName}: Bolster must be surfaced for a deployed matching Unit`);
-  assert.ok(labels.includes('전술'), `${viewportName}: Tactic must be surfaced for Light Cavalry`);
-  assert.equal(await page.locator('.context-unit-actions').isVisible(), true, `${viewportName}: selected Unit action bar must be visible`);
+  const labels = await page.locator('.board-unit-action-button').allTextContents();
+  assert.ok(labels.includes('증원'), `${viewportName}: Bolster must appear above the selected Unit`);
+  assert.ok(labels.includes('전술'), `${viewportName}: Tactic must appear above Light Cavalry`);
+  assert.equal(await page.locator('.board-unit-action-button.bolster').isVisible(), true, `${viewportName}: battlefield Bolster button must be visible`);
+  assert.equal(await page.locator('.context-unit-actions').count(), 0, `${viewportName}: duplicated HUD action bar must not be rendered`);
 
-  // Use the real generated action, not a synthetic SVG fixture. This catches the
-  // original regression where the board path existed but the contextual actions
-  // were effectively unavailable to the player.
-  await page.locator('.context-unit-action.bolster').click();
+  const position = await page.locator('.board-unit-action-overlay').evaluate((overlay) => ({
+    y: Number(overlay.getAttribute('y')),
+    unitY: Number(document.querySelector('.unit-token[data-unit-type="LIGHT_CAVALRY"] circle')?.getAttribute('cy')),
+  }));
+  assert.ok(position.y < position.unitY, `${viewportName}: action buttons must be positioned above the Unit token`);
+
+  await page.locator('.board-unit-action-button.bolster').click();
   await page.waitForTimeout(1050);
 
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('war-chest-solo-local-v2') || 'null'));
   const light = saved?.boardUnits?.find((candidate) => candidate.id === 'u-test-light');
-  assert.equal(light?.strength, 2, `${viewportName}: Bolster button must execute the real game action`);
+  assert.equal(light?.strength, 2, `${viewportName}: battlefield Bolster button must execute the real game action`);
 }
 
 try {
