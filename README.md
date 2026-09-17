@@ -1,9 +1,16 @@
-# War Chest Solo Local — v0.3
+# War Chest Solo Local — v0.4
 
 War Chest 기본판의 핵심 규칙을 바탕으로 만든 **비공식 개인용 로컬 1인 웹게임**입니다. 원작 카드 이미지나 아트 자산은 포함하지 않고, 텍스트와 자체 도형 UI만 사용합니다.
 
 ## 이번 버전의 주요 기능
 
+
+## v0.4 unit-card UX
+
+- Setup CTA buttons have explicit light/dark contrast so Recommended / Random / Draft are always visible
+- Hover panel now follows the real War Chest card information hierarchy: unit header, coin count, hex diagram, and separated Tactic / Attribute / Restriction sections
+- Every base-game unit gets an original SVG hex-grid movement/attack diagram (no original card artwork embedded)
+- Tooltip copy uses line breaks and labels rather than a single paragraph
 
 ## v0.3 UI/UX redesign highlights
 

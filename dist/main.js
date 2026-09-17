@@ -52,6 +52,169 @@ function infoForCoin(coin) {
     const unit = UNIT_DEFS[coin];
     return { ko: unit.ko, name: unit.name, accent: unit.accent, rules: unit.rules, coinCount: unit.coinCount };
 }
+const UNIT_CARD_RULES = {
+    ARCHER: [
+        { kind: 'TACTIC', title: '전술', text: '정확히 2칸 떨어진 적 유닛을 공격한다. 중간 칸에는 유닛이 있어도 된다.' },
+        { kind: 'RESTRICTION', title: '제한', text: '궁수는 일반 공격을 할 수 없고 이 전술로만 공격한다.' },
+    ],
+    BERSERKER: [
+        { kind: 'ATTRIBUTE', title: '속성', text: '기동 후 자신의 스택에서 코인 1개를 제거하면 즉시 추가 기동 1회를 할 수 있다.' },
+        { kind: 'RESTRICTION', title: '제한', text: '스택의 마지막 코인은 이 효과로 제거할 수 없다.' },
+    ],
+    CAVALRY: [
+        { kind: 'TACTIC', title: '전술', text: '1칸 이동한 뒤, 새 위치에서 인접한 적을 공격한다.' },
+    ],
+    CROSSBOWMAN: [
+        { kind: 'TACTIC', title: '전술', text: '직선으로 정확히 2칸 떨어진 적을 공격한다. 중간 칸은 비어 있어야 한다.' },
+        { kind: 'ATTRIBUTE', title: '일반 공격', text: '인접한 적에 대한 일반 공격도 가능하다.' },
+    ],
+    ENSIGN: [
+        { kind: 'TACTIC', title: '전술', text: '기수로부터 2칸 이내의 아군 1개가 일반 이동 1회를 한다.' },
+        { kind: 'RESTRICTION', title: '제한', text: '이동 후에도 그 아군은 기수로부터 2칸 이내에 있어야 한다.' },
+    ],
+    FOOTMAN: [
+        { kind: 'TACTIC', title: '전술', text: '보드 위의 각 보병이 각각 기동 1회를 한다.' },
+        { kind: 'ATTRIBUTE', title: '속성', text: '같은 보병 유닛을 최대 2개까지 동시에 배치할 수 있다.' },
+    ],
+    KNIGHT: [
+        { kind: 'ATTRIBUTE', title: '속성', text: '강화된 유닛, 즉 스택이 2개 이상인 유닛에게만 공격받을 수 있다.' },
+    ],
+    LANCER: [
+        { kind: 'TACTIC', title: '전술', text: '직선으로 1~2칸 이동한 뒤 같은 직선 방향의 인접한 적을 공격한다.' },
+        { kind: 'RESTRICTION', title: '제한', text: '창기병은 일반 공격을 할 수 없다.' },
+    ],
+    LIGHT_CAVALRY: [
+        { kind: 'TACTIC', title: '전술', text: '한 번의 전술로 2칸 이동한다.' },
+        { kind: 'ATTRIBUTE', title: '일반 이동', text: '평소에는 다른 유닛처럼 일반 1칸 이동도 가능하다.' },
+    ],
+    MARSHALL: [
+        { kind: 'TACTIC', title: '전술', text: '지휘관으로부터 2칸 이내의 아군 1개가 가능한 경우 일반 공격 1회를 한다.' },
+    ],
+    MERCENARY: [
+        { kind: 'ATTRIBUTE', title: '속성', text: '용병 코인을 영입한 직후 보드에 용병이 있다면 무료 기동 1회를 할 수 있다.' },
+    ],
+    PIKEMAN: [
+        { kind: 'ATTRIBUTE', title: '속성', text: '인접 유닛에게 공격받으면 공격자 스택에서도 코인 1개를 동시에 제거한다.' },
+    ],
+    ROYAL_GUARD: [
+        { kind: 'TACTIC', title: '전술', text: 'Royal Coin을 사용해 최대 2칸 이동하고 자신이 지배하는 Location에 도착한다.' },
+        { kind: 'ATTRIBUTE', title: '속성', text: '공격받을 때 보드 코인 대신 Supply의 근위병 코인 1개를 제거할 수 있다.' },
+    ],
+    SCOUT: [
+        { kind: 'ATTRIBUTE', title: '속성', text: '일반 배치 지점뿐 아니라 아군 유닛과 인접한 빈 칸에도 배치할 수 있다.' },
+    ],
+    SWORDSMAN: [
+        { kind: 'ATTRIBUTE', title: '속성', text: '공격을 해결한 뒤 선택적으로 일반 이동 1회를 할 수 있다.' },
+    ],
+    WARRIOR_PRIEST: [
+        { kind: 'ATTRIBUTE', title: '속성', text: '공격 또는 점령 후 Bag에서 코인 1개를 뽑고 그 코인으로 즉시 행동한다.' },
+    ],
+};
+function diagramHexPoints(cx, cy, size = 15) {
+    const pts = [];
+    for (let i = 0; i < 6; i += 1) {
+        const angle = (Math.PI / 180) * (60 * i - 30);
+        pts.push(`${(cx + size * Math.cos(angle)).toFixed(1)},${(cy + size * Math.sin(angle)).toFixed(1)}`);
+    }
+    return pts.join(' ');
+}
+function diagramPoint(col, row) {
+    return { x: 30 + col * 31 + (row % 2 ? 15.5 : 0), y: 25 + row * 27 };
+}
+function diagramField() {
+    const cells = [];
+    for (let row = 0; row < 4; row += 1) {
+        for (let col = 0; col < 7; col += 1) {
+            const { x, y } = diagramPoint(col, row);
+            cells.push(`<polygon points="${diagramHexPoints(x, y)}" class="diagram-hex"/>`);
+        }
+    }
+    return cells.join('');
+}
+function diagramMarker(x, y, kind, label = '') {
+    const cls = `diagram-marker ${kind}`;
+    const base = kind === 'empty'
+        ? `<circle cx="${x}" cy="${y}" r="9" class="${cls}" fill="none"/><circle cx="${x}" cy="${y}" r="2" class="diagram-empty-dot"/>`
+        : kind === 'location'
+            ? `<polygon points="${diagramHexPoints(x, y, 10)}" class="${cls}"/>`
+            : `<circle cx="${x}" cy="${y}" r="9" class="${cls}"/>`;
+    return `${base}${label ? `<text x="${x}" y="${y + 3}" text-anchor="middle" class="diagram-label">${esc(label)}</text>` : ''}`;
+}
+function diagramArrow(x1, y1, x2, y2, kind = 'move', dashed = false) {
+    return `<path d="M ${x1} ${y1} L ${x2} ${y2}" class="diagram-arrow ${kind}${dashed ? ' dashed' : ''}" marker-end="url(#diagramArrowHead)"/>`;
+}
+function diagramText(x, y, text, cls = '') {
+    return `<text x="${x}" y="${y}" class="diagram-note ${cls}">${esc(text)}</text>`;
+}
+function renderUnitDiagram(type) {
+    const p = diagramPoint;
+    const P = (c, r) => p(c, r);
+    let overlay = '';
+    const a = P(1, 2), b = P(2, 1), c = P(3, 0), d = P(3, 2), e = P(4, 1), f = P(5, 2);
+    switch (type) {
+        case 'ARCHER':
+            overlay = `${diagramMarker(a.x, a.y, 'self')}${diagramMarker(b.x, b.y, 'ally', '•')}${diagramMarker(c.x, c.y, 'enemy')}${diagramArrow(a.x + 7, a.y - 6, c.x - 7, c.y + 6, 'attack', true)}${diagramText(143, 112, '중간 칸 점유 가능', 'ok')}`;
+            break;
+        case 'BERSERKER':
+            overlay = `${diagramMarker(a.x, a.y, 'self', '3')}${diagramMarker(d.x, d.y, 'self', '2')}${diagramMarker(f.x, f.y, 'self', '1')}${diagramArrow(a.x + 10, a.y, d.x - 10, d.y, 'move')}${diagramArrow(d.x + 10, d.y, f.x - 10, f.y, 'move')}${diagramText(92, 110, '−1 coin')}${diagramText(185, 110, '−1 coin')}`;
+            break;
+        case 'CAVALRY':
+            overlay = `${diagramMarker(a.x, a.y, 'self')}${diagramMarker(d.x, d.y, 'empty')}${diagramMarker(e.x, e.y, 'enemy')}${diagramArrow(a.x + 10, a.y, d.x - 10, d.y, 'move')}${diagramArrow(d.x + 8, d.y - 6, e.x - 8, e.y + 6, 'attack')}${diagramText(123, 112, '이동 → 공격')}`;
+            break;
+        case 'CROSSBOWMAN':
+            overlay = `${diagramMarker(a.x, a.y, 'self')}${diagramMarker(d.x, d.y, 'empty')}${diagramMarker(f.x, f.y, 'enemy')}${diagramArrow(a.x + 10, a.y, f.x - 10, f.y, 'attack')}${diagramText(116, 112, '중간 칸은 비어 있어야 함', 'warn')}`;
+            break;
+        case 'ENSIGN':
+            overlay = `${diagramMarker(c.x, c.y, 'self', 'E')}${diagramMarker(d.x, d.y, 'ally')}${diagramMarker(e.x, e.y, 'empty')}${diagramArrow(d.x + 8, d.y - 5, e.x - 8, e.y + 5, 'move')}${diagramText(128, 112, '2칸 범위 안에서 아군 이동')}`;
+            break;
+        case 'FOOTMAN': {
+            const g = P(1, 1), h = P(4, 2), g2 = P(2, 1), h2 = P(5, 2);
+            overlay = `${diagramMarker(g.x, g.y, 'self', '1')}${diagramMarker(h.x, h.y, 'self', '2')}${diagramMarker(g2.x, g2.y, 'empty')}${diagramMarker(h2.x, h2.y, 'empty')}${diagramArrow(g.x + 9, g.y, g2.x - 9, g2.y, 'move')}${diagramArrow(h.x + 9, h.y, h2.x - 9, h2.y, 'move')}${diagramText(127, 112, '두 보병이 각각 기동')}`;
+            break;
+        }
+        case 'KNIGHT':
+            overlay = `${diagramMarker(d.x, d.y, 'self', 'K')}${diagramMarker(a.x, a.y, 'enemy', '1')}${diagramMarker(e.x, e.y, 'enemy', '2')}${diagramArrow(a.x + 9, a.y, d.x - 9, d.y, 'attack')}${diagramArrow(e.x - 9, e.y + 4, d.x + 9, d.y - 4, 'attack')}${diagramText(36, 111, '×', 'blocked')}${diagramText(186, 111, '✓', 'ok')}`;
+            break;
+        case 'LANCER':
+            overlay = `${diagramMarker(P(0, 2).x, P(0, 2).y, 'self')}${diagramMarker(a.x, a.y, 'empty')}${diagramMarker(d.x, d.y, 'empty')}${diagramMarker(f.x, f.y, 'enemy')}${diagramArrow(P(0, 2).x + 9, P(0, 2).y, d.x - 9, d.y, 'move')}${diagramArrow(d.x + 9, d.y, f.x - 9, f.y, 'attack')}${diagramText(108, 112, '직선 이동 후 같은 방향 공격')}`;
+            break;
+        case 'LIGHT_CAVALRY':
+            overlay = `${diagramMarker(a.x, a.y, 'self')}${diagramMarker(d.x, d.y, 'empty')}${diagramMarker(f.x, f.y, 'empty')}${diagramArrow(a.x + 9, a.y, d.x - 9, d.y, 'move')}${diagramArrow(d.x + 9, d.y, f.x - 9, f.y, 'move')}${diagramText(129, 112, '2칸 이동')}`;
+            break;
+        case 'MARSHALL':
+            overlay = `${diagramMarker(c.x, c.y, 'self', 'M')}${diagramMarker(d.x, d.y, 'ally')}${diagramMarker(e.x, e.y, 'enemy')}${diagramArrow(d.x + 9, d.y - 4, e.x - 9, e.y + 4, 'attack')}${diagramText(126, 112, '2칸 내 아군에게 일반 공격 부여')}`;
+            break;
+        case 'MERCENARY':
+            overlay = `${diagramMarker(P(0, 1).x, P(0, 1).y, 'location', '+')}${diagramText(18, 18, 'Recruit')}${diagramMarker(d.x, d.y, 'self')}${diagramMarker(e.x, e.y, 'empty')}${diagramArrow(P(0, 1).x + 12, P(0, 1).y, d.x - 12, d.y, 'effect', true)}${diagramArrow(d.x + 9, d.y - 4, e.x - 9, e.y + 4, 'move')}${diagramText(126, 112, '영입 직후 무료 기동')}`;
+            break;
+        case 'PIKEMAN':
+            overlay = `${diagramMarker(d.x, d.y, 'self', 'P')}${diagramMarker(e.x, e.y, 'enemy')}${diagramArrow(e.x - 9, e.y + 4, d.x + 9, d.y - 4, 'attack')}${diagramArrow(d.x + 9, d.y - 8, e.x - 9, e.y - 2, 'effect', true)}${diagramText(138, 112, '공격자도 −1')}`;
+            break;
+        case 'ROYAL_GUARD':
+            overlay = `${diagramMarker(P(0, 1).x, P(0, 1).y, 'location', '♛')}${diagramMarker(a.x, a.y, 'self')}${diagramMarker(f.x, f.y, 'location')}${diagramArrow(P(0, 1).x + 11, P(0, 1).y + 6, a.x - 11, a.y - 6, 'effect', true)}${diagramArrow(a.x + 9, a.y, f.x - 9, f.y, 'move')}${diagramText(128, 112, 'Royal Coin → 내 Location')}`;
+            break;
+        case 'SCOUT':
+            overlay = `${diagramMarker(d.x, d.y, 'ally')}${diagramMarker(e.x, e.y, 'self', '+')}${diagramArrow(d.x + 9, d.y - 4, e.x - 9, e.y + 4, 'effect', true)}${diagramText(120, 112, '아군 인접 빈 칸에 배치')}`;
+            break;
+        case 'SWORDSMAN':
+            overlay = `${diagramMarker(d.x, d.y, 'self')}${diagramMarker(e.x, e.y, 'enemy')}${diagramMarker(c.x, c.y, 'empty')}${diagramArrow(d.x + 9, d.y - 4, e.x - 9, e.y + 4, 'attack')}${diagramArrow(d.x - 3, d.y - 9, c.x + 3, c.y + 9, 'move', true)}${diagramText(123, 112, '공격 후 선택 이동')}`;
+            break;
+        case 'WARRIOR_PRIEST':
+            overlay = `${diagramMarker(a.x, a.y, 'self')}${diagramMarker(d.x, d.y, 'enemy')}${diagramArrow(a.x + 9, a.y, d.x - 9, d.y, 'attack')}${diagramMarker(f.x, f.y, 'location', '+')}${diagramArrow(d.x + 12, d.y - 3, f.x - 12, f.y + 3, 'effect', true)}${diagramText(129, 112, '공격/점령 → 코인 1개 즉시 사용')}`;
+            break;
+    }
+    const accent = UNIT_DEFS[type].accent;
+    return `<svg class="unit-card-diagram" viewBox="0 0 250 126" role="img" aria-label="${esc(UNIT_DEFS[type].ko)} 전술 예시">
+    <defs>
+      <marker id="diagramArrowHead" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0 0 L7 3.5 L0 7 Z" fill="context-stroke"/></marker>
+    </defs>
+    <rect x="0.5" y="0.5" width="249" height="125" rx="15" class="diagram-bg"/>
+    <g style="--unit-accent:${accent}">${diagramField()}${overlay}</g>
+  </svg>`;
+}
+function ruleSectionsHtml(type) {
+    return `<div class="rule-sections">${UNIT_CARD_RULES[type].map((section) => `<div class="rule-section ${section.kind.toLowerCase()}"><span class="rule-kind">${section.title}</span><p>${esc(section.text)}</p></div>`).join('')}</div>`;
+}
 function randomSubset(items, count) {
     const copy = [...items];
     for (let i = copy.length - 1; i > 0; i -= 1) {
@@ -260,16 +423,32 @@ function tooltipStatsHtml(stats) {
 }
 function renderUnitTooltip(coin, stats = {}) {
     const info = infoForCoin(coin);
-    return `
-    <div class="tooltip-head">
-      <div class="tooltip-icon-shell" style="--accent:${info.accent}">${unitIconSvg(coin)}</div>
-      <div>
-        <div class="eyebrow">UNIT INFO</div>
-        <h4>${esc(info.ko)} <span>${esc(info.name)}</span></h4>
+    if (coin === 'ROYAL') {
+        return `
+      <div class="tooltip-card-header" style="--accent:${info.accent}">
+        <div class="tooltip-icon-shell">${unitIconSvg(coin)}</div>
+        <div class="tooltip-title-wrap"><div class="eyebrow">SPECIAL COIN</div><h4>${esc(info.ko)}</h4></div>
       </div>
-    </div>
-    ${tooltipStatsHtml(stats)}
-    <p>${esc(info.rules)}</p>
+      ${tooltipStatsHtml(stats)}
+      <div class="rule-sections"><div class="rule-section note"><span class="rule-kind">용도</span><p>${esc(info.rules)}</p></div></div>
+    `;
+    }
+    const unit = UNIT_DEFS[coin];
+    return `
+    <article class="unit-card-tooltip" style="--accent:${unit.accent}">
+      <div class="tooltip-card-header">
+        <div class="tooltip-icon-shell">${unitIconSvg(coin)}</div>
+        <div class="tooltip-title-wrap">
+          <div class="eyebrow">UNIT CARD</div>
+          <h4>${esc(unit.ko)} <span>${esc(unit.name)}</span></h4>
+        </div>
+        <div class="coin-count">×${unit.coinCount}</div>
+      </div>
+      ${tooltipStatsHtml(stats)}
+      <div class="diagram-caption">전술 / 이동 예시</div>
+      ${renderUnitDiagram(coin)}
+      ${ruleSectionsHtml(coin)}
+    </article>
   `;
 }
 function positionTooltip(tooltip, evt) {
