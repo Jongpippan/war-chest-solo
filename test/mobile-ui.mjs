@@ -3,21 +3,45 @@ import { chromium } from 'playwright';
 
 const baseUrl = process.env.WAR_CHEST_TEST_URL ?? 'http://127.0.0.1:4173/';
 const browser = await chromium.launch({ headless: true });
-const context = await browser.newContext({
-  viewport: { width: 390, height: 844 },
-  isMobile: true,
-  hasTouch: true,
-});
 
-// Keep the opening turn deterministic so the bot cannot replace the DOM while
-// the mobile interaction assertions are running.
-await context.addInitScript(() => {
-  Math.random = () => 0.1;
-});
-
-const page = await context.newPage();
+async function injectSyntheticActions(page) {
+  await page.evaluate(() => {
+    const board = document.querySelector('.battlefield');
+    if (!board) throw new Error('Battlefield missing');
+    const ns = 'http://www.w3.org/2000/svg';
+    const popover = document.createElementNS(ns, 'g');
+    popover.classList.add('unit-action-popover');
+    popover.dataset.actionFor = 'synthetic-unit';
+    for (const [key, cls, label] of [
+      ['special:BOLSTER', 'bolster', 'BOLSTER'],
+      ['special:TACTIC', 'tactic', 'TACTIC'],
+      ['special:CONTROL', 'control', 'CONTROL'],
+    ]) {
+      const source = document.createElementNS(ns, 'g');
+      source.classList.add('board-action-chip', cls);
+      source.dataset.boardKey = key;
+      source.textContent = label;
+      source.addEventListener('click', () => {
+        document.documentElement.dataset.contextProxyHit = key;
+      });
+      popover.append(source);
+    }
+    board.append(popover);
+  });
+}
 
 try {
+  const mobileContext = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    isMobile: true,
+    hasTouch: true,
+  });
+
+  await mobileContext.addInitScript(() => {
+    Math.random = () => 0.1;
+  });
+
+  const page = await mobileContext.newPage();
   await page.goto(baseUrl, { waitUntil: 'networkidle' });
   await page.waitForSelector('.unit-pick[data-unit]');
 
@@ -40,8 +64,6 @@ try {
   assert.equal(await secondUnit.evaluate((element) => element.classList.contains('selected')), secondSelectedBefore, 'underlying Unit card must not receive the dismiss tap');
   assert.equal(await page.locator('#unitTooltip').evaluate((element) => element.hidden), true, 'dismiss tap must close the Unit tooltip');
 
-  // Enter the actual game UI and verify the utilities that used to disappear on
-  // mobile are present and visible.
   await page.locator('#startBtn').click();
   await page.waitForSelector('.integrated-header');
   await page.waitForSelector('.mobile-bot-last-action');
@@ -49,40 +71,13 @@ try {
   assert.equal(await page.locator('.utility-toolbar').isVisible(), true, 'utility toolbar must be visible on mobile');
   assert.equal(await page.locator('.mobile-bot-last-action').isVisible(), true, 'last bot action panel must be visible on mobile');
 
-  // Regression: hidden SVG action data is surfaced as touch-sized HTML actions.
-  // This synthetic popover isolates the mobile adapter from game-state setup and
-  // verifies Bolster/Tactic/Control mapping plus click forwarding.
-  await page.evaluate(() => {
-    const board = document.querySelector('.battlefield');
-    if (!board) throw new Error('Battlefield missing');
-    const ns = 'http://www.w3.org/2000/svg';
-    const popover = document.createElementNS(ns, 'g');
-    popover.classList.add('unit-action-popover');
-    for (const [key, cls, label] of [
-      ['special:BOLSTER', 'bolster', 'BOLSTER'],
-      ['special:TACTIC', 'tactic', 'TACTIC'],
-      ['special:CONTROL', 'control', 'CONTROL'],
-    ]) {
-      const source = document.createElementNS(ns, 'g');
-      source.classList.add('board-action-chip', cls);
-      source.dataset.boardKey = key;
-      source.textContent = label;
-      source.addEventListener('click', () => {
-        document.documentElement.dataset.mobileProxyHit = key;
-      });
-      popover.append(source);
-    }
-    board.append(popover);
-  });
+  await injectSyntheticActions(page);
+  await page.waitForSelector('.context-unit-actions');
+  const labels = await page.locator('.context-unit-action').allTextContents();
+  assert.deepEqual(labels, ['증원', '전술', '점령'], 'shared action bar must expose the selected Unit actions on mobile');
+  await page.locator('.context-unit-action.tactic').click();
+  assert.equal(await page.locator('html').getAttribute('data-context-proxy-hit'), 'special:TACTIC', 'mobile action must forward to the original board action');
 
-  await page.waitForSelector('.mobile-unit-actions');
-  const labels = await page.locator('.mobile-unit-action').allTextContents();
-  assert.deepEqual(labels, ['증원', '전술', '점령'], 'mobile action bar must expose the selected Unit actions');
-  await page.locator('.mobile-unit-action.tactic').click();
-  assert.equal(await page.locator('html').getAttribute('data-mobile-proxy-hit'), 'special:TACTIC', 'mobile action must forward to the original board action');
-
-  // The exact bot action is captured from playback when available and reflected
-  // in the persistent mobile summary.
   await page.evaluate(() => {
     const toast = document.createElement('div');
     toast.className = 'action-playback-toast bot';
@@ -90,8 +85,27 @@ try {
     document.body.append(toast);
   });
   await page.waitForFunction(() => document.querySelector('.mobile-bot-last-action strong')?.textContent === '테스트 봇 전술 행동');
+  await mobileContext.close();
 
-  console.log('mobile UI regression checks passed');
+  // Desktop regression: the same selected-Unit actions must be surfaced even
+  // though the mobile-only header helpers are not active.
+  const desktopContext = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  await desktopContext.addInitScript(() => {
+    Math.random = () => 0.1;
+  });
+  const desktopPage = await desktopContext.newPage();
+  await desktopPage.goto(baseUrl, { waitUntil: 'networkidle' });
+  await desktopPage.locator('#startBtn').click();
+  await desktopPage.waitForSelector('.battlefield');
+  await injectSyntheticActions(desktopPage);
+  await desktopPage.waitForSelector('.context-unit-actions');
+  assert.equal(await desktopPage.locator('.context-unit-actions').isVisible(), true, 'selected Unit action bar must be visible on desktop');
+  await desktopPage.locator('.context-unit-action.bolster').click();
+  assert.equal(await desktopPage.locator('html').getAttribute('data-context-proxy-hit'), 'special:BOLSTER', 'desktop action must forward to the original board action');
+  assert.equal(await desktopPage.locator('.mobile-bot-last-action').count(), 0, 'mobile-only bot summary must stay off desktop');
+  await desktopContext.close();
+
+  console.log('responsive UI regression checks passed');
 } finally {
   await browser.close();
 }
