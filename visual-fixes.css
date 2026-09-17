@@ -15,39 +15,141 @@
   border-color: rgba(146,63,70,.28) !important;
 }
 
-/* Unit Supply is primarily a physical coin supply during play. Keep the one
-   number that matters at small desktop widths and avoid unreadable microcopy. */
+/* Never split words in the middle. Korean and English copy may wrap only at
+   natural whitespace boundaries. This is deliberately global so future UI
+   labels inherit the same rule automatically. */
+html,
+body,
+body * {
+  word-break: keep-all !important;
+  overflow-wrap: normal !important;
+  hyphens: none !important;
+}
+
+/* Controls and short game terms are atomic labels: keep the complete label on
+   one line and let the surrounding layout make room for it. */
+button,
+.game-term,
+.eyebrow,
+.round-chip,
+.turn-chip,
+.difficulty-chip,
+.utility-toggle,
+.resource-label,
+.zone-action-tag,
+.supply-action-tag,
+.supply-total,
+.control-score,
+.interaction-legend span {
+  white-space: nowrap !important;
+}
+
+/* Explanatory copy can use multiple lines, but never break inside a word. */
+p,
+li,
+small,
+.rule-section p,
+.interaction-copy,
+.bot-last-action,
+.supply-name {
+  white-space: normal;
+}
+
+/* Unit Supply is primarily a physical coin supply during play. Use the full
+   side-rail width: one Unit per row instead of squeezing two cards side-by-side. */
+.tabletop-player.human .supply-grid,
+.tabletop-player.bot .supply-grid {
+  grid-template-columns: minmax(0, 1fr) !important;
+  grid-auto-rows: minmax(62px, auto) !important;
+  gap: 6px !important;
+  align-content: start !important;
+}
+
+.tabletop-player.human .supply-card,
+.tabletop-player.bot .supply-card {
+  min-height: 62px !important;
+  padding: 7px 9px !important;
+  gap: 5px !important;
+  overflow: visible !important;
+}
+
+.tabletop-player.human .supply-card-head,
+.tabletop-player.bot .supply-card-head {
+  grid-template-columns: 34px minmax(0, 1fr) auto !important;
+  gap: 8px !important;
+  align-items: center !important;
+}
+
+.tabletop-player.human .supply-icon,
+.tabletop-player.bot .supply-icon {
+  width: 34px !important;
+  height: 34px !important;
+}
+
+.tabletop-player.human .supply-card-foot,
+.tabletop-player.bot .supply-card-foot {
+  grid-template-columns: minmax(118px, 1fr) auto !important;
+  gap: 10px !important;
+  align-items: center !important;
+}
+
+.supply-name {
+  min-width: 0;
+  overflow: visible !important;
+}
+.supply-name strong,
+.supply-name small {
+  display: block !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+  white-space: normal !important;
+  line-height: 1.16 !important;
+}
+.supply-name strong {
+  font-size: 11px !important;
+  font-weight: 850 !important;
+}
+.supply-name small {
+  margin-top: 2px;
+  font-size: 8px !important;
+}
+
 .supply-stats {
   display: flex !important;
   align-items: center;
   justify-content: flex-end;
-  gap: 4px !important;
-  min-width: 0;
+  gap: 7px !important;
+  min-width: max-content;
   white-space: nowrap;
 }
 .supply-stats span {
-  min-width: 0;
-  font-size: 7px !important;
+  min-width: max-content;
+  font-size: 7.5px !important;
   line-height: 1 !important;
   letter-spacing: .02em;
+  white-space: nowrap !important;
 }
 .supply-stats b {
   display: inline !important;
   margin-left: 2px;
-  font-size: 9px !important;
+  font-size: 9.5px !important;
 }
-@media (max-width: 1366px) and (min-width: 1101px) {
-  .supply-stats span:not(:first-child) { display: none !important; }
-  .supply-stats span:first-child { font-size: 8px !important; font-weight: 800; }
-  .supply-stats span:first-child b { font-size: 10px !important; }
-  .supply-card-foot { grid-template-columns: minmax(38px,.8fr) auto !important; }
+
+/* Keep Recruit clear of the stats rather than floating over text. */
+.supply-card.actionable {
+  padding-right: 64px !important;
+}
+.supply-action-tag {
+  right: 8px !important;
+  bottom: 8px !important;
+  max-width: 54px;
 }
 
 /* Make the most recent bot move visually persistent instead of letting it
    disappear into the header chrome after the board rerenders. */
 .bot-last-action {
   position: relative;
-  overflow: hidden;
+  overflow: visible !important;
 }
 .bot-last-action::before {
   content: '';
@@ -56,7 +158,12 @@
   width: 3px;
   background: var(--bot);
 }
-.bot-last-action > strong { min-width: 0; }
+.bot-last-action > strong,
+.bot-last-action > small {
+  min-width: 0;
+  overflow: visible !important;
+  text-overflow: clip !important;
+}
 
 /* The board title strip is intentionally removed: the battlefield itself and
    the interaction strip below it now consume the full available height. */
@@ -71,15 +178,38 @@
   fill: rgba(248,252,232,.96) !important;
 }
 
-/* Small screen table copy: never let labels collide with values. */
+/* Resource labels should wrap at spaces instead of being clipped. */
 .resource-label,
 .supply-card-head,
 .supply-card-foot,
-.header-game-meta { min-width: 0; }
+.header-game-meta {
+  min-width: 0;
+}
 .resource-label span,
-.resource-label b,
-.supply-name strong,
-.supply-name small { white-space: nowrap; }
-.supply-name { overflow: hidden; }
-.supply-name strong,
-.supply-name small { overflow: hidden; text-overflow: ellipsis; }
+.resource-label b {
+  overflow: visible !important;
+  text-overflow: clip !important;
+}
+
+@media (max-width: 1366px) and (min-width: 1101px) {
+  .tabletop-player.human .supply-grid,
+  .tabletop-player.bot .supply-grid {
+    grid-auto-rows: minmax(58px, auto) !important;
+    gap: 5px !important;
+  }
+  .tabletop-player.human .supply-card,
+  .tabletop-player.bot .supply-card {
+    min-height: 58px !important;
+    padding: 6px 8px !important;
+  }
+  .tabletop-player.human .supply-card-foot,
+  .tabletop-player.bot .supply-card-foot {
+    grid-template-columns: minmax(102px, 1fr) auto !important;
+    gap: 7px !important;
+  }
+  .supply-name strong { font-size: 10.5px !important; }
+  .supply-name small { font-size: 7.5px !important; }
+  .supply-stats { gap: 5px !important; }
+  .supply-stats span { font-size: 7px !important; }
+  .supply-stats b { font-size: 9px !important; }
+}
