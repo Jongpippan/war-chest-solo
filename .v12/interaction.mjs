@@ -32,7 +32,6 @@ const saved = {
       removed: [], markersRemaining: 4,
     },
   },
-  // Deliberately duplicate IDs to verify migration of old saves.
   boardUnits: [
     { id: 'u1', owner: 'human', type: 'LIGHT_CAVALRY', hex: '0,0', strength: 2 },
     { id: 'u1', owner: 'bot', type: 'SCOUT', hex: '1,0', strength: 2 },
@@ -49,21 +48,20 @@ await page.reload({ waitUntil: 'networkidle' });
 await page.locator('#resumeBtn').click();
 await page.waitForSelector('.battlefield');
 
-// Old duplicate IDs must be repaired on load.
 let stored = await page.evaluate(() => JSON.parse(localStorage.getItem('war-chest-solo-local-v2')));
 assert.equal(new Set(stored.boardUnits.map((unit) => unit.id)).size, 2, 'duplicate saved unit IDs were not repaired');
 
-// Selected-unit actions are anchored over the selected Unit again.
 const humanUnit = page.locator('.unit-token[data-owner-label="Your Unit"]');
 await humanUnit.click();
-const popover = page.locator('.unit-action-popover');
-await popover.waitFor({ state: 'visible' });
-const popoverText = await popover.textContent();
-assert.match(popoverText ?? '', /BOLSTER/);
-assert.match(popoverText ?? '', /TACTIC/);
+const bolsterChip = page.locator('.unit-action-popover .board-action-chip.bolster');
+const tacticChip = page.locator('.unit-action-popover .board-action-chip.tactic');
+await tacticChip.waitFor({ state: 'attached' });
+assert.equal(await bolsterChip.count(), 1, 'Bolster chip should be attached to selected own Unit');
+assert.equal(await tacticChip.count(), 1, 'Tactic chip should be attached to selected own Unit');
+const tacticBox = await tacticChip.boundingBox();
+assert(tacticBox && tacticBox.width > 20 && tacticBox.height > 10, 'Tactic chip must have a visible SVG bounding box');
 await page.screenshot({ path: '.v12/screens/desktop-selected-unit-actions.png', fullPage: true });
 
-// Attack the strengthened Scout. It must lose exactly one coin and the ~1s playback must be visible.
 const botUnit = page.locator('.unit-token[data-owner-label="Bot Unit"]');
 await botUnit.click();
 await page.locator('.action-playback-toast').waitFor({ state: 'visible' });
@@ -82,10 +80,8 @@ assert.equal(stored.boardUnits.find((unit) => unit.owner === 'human')?.strength,
 assert(stored.log.some((line) => line.includes('경기병') && line.includes('정찰병') && line.includes('Attack')), 'Attack log must use the actual target type');
 assert(!stored.log.some((line) => line.includes('경기병이(가) 경기병')), 'Attack log must not self-label the target');
 
-// Persistent BOT LAST ACTION emphasis should be gone from the header.
 assert.equal(await page.locator('.bot-last-action').count(), 0);
 
-// Mobile: Battlefield first, then BOT/YOU side-by-side below it.
 await page.setViewportSize({ width: 390, height: 844 });
 await page.reload({ waitUntil: 'networkidle' });
 await page.locator('#resumeBtn').click();
