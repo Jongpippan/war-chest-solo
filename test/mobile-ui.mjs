@@ -7,6 +7,7 @@ const browser = await chromium.launch({ headless: true });
 async function seedLightCavalryGame(page) {
   await page.evaluate(async () => {
     const { createGame } = await import('./dist/engine.js');
+    const { UNIT_DEFS } = await import('./dist/data.js');
     const state = createGame(
       ['LIGHT_CAVALRY', 'ARCHER', 'FOOTMAN', 'PIKEMAN'],
       ['CAVALRY', 'KNIGHT', 'SCOUT', 'SWORDSMAN'],
@@ -16,11 +17,22 @@ async function seedLightCavalryGame(page) {
     state.activePlayer = 'human';
     state.initiative = 'human';
     state.players.human.hand = ['LIGHT_CAVALRY'];
-    state.players.human.bag = [];
+    state.players.human.bag = ['ROYAL'];
     state.players.human.discard = [];
+    state.players.human.removed = [];
     state.players.bot.hand = [];
-    state.players.bot.bag = [];
+    state.players.bot.bag = ['ROYAL'];
     state.players.bot.discard = [];
+    state.players.bot.removed = [];
+
+    for (const type of state.players.human.units) {
+      state.players.human.supply[type] = UNIT_DEFS[type].coinCount;
+    }
+    state.players.human.supply.LIGHT_CAVALRY = UNIT_DEFS.LIGHT_CAVALRY.coinCount - 2;
+    for (const type of state.players.bot.units) {
+      state.players.bot.supply[type] = UNIT_DEFS[type].coinCount;
+    }
+
     state.boardUnits = [
       { id: 'u-test-light', owner: 'human', type: 'LIGHT_CAVALRY', hex: '0,0', strength: 1 },
     ];
@@ -31,6 +43,7 @@ async function seedLightCavalryGame(page) {
   await page.reload({ waitUntil: 'networkidle' });
   await page.locator('#resumeBtn').click();
   await page.waitForSelector('.battlefield');
+  assert.equal(await page.locator('.debug-warning').count(), 0, 'seeded browser state must satisfy engine sanity checks');
 }
 
 async function selectLightCavalry(page) {
