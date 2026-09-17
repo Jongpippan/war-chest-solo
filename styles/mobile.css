@@ -1,43 +1,55 @@
-/* Mobile interaction layer: keeps touch behavior separate from the desktop tabletop layout. */
+/* Mobile/responsive interaction layer. */
 .mobile-bot-last-action {
   display: none;
 }
 
-/* Selected Unit actions are shared by desktop and mobile. */
-.context-unit-actions {
-  grid-column: 1 / -1;
-  display: flex;
-  align-items: center;
-  gap: 6px;
+/* main.ts keeps its SVG action chips as structural click targets only. The
+   user-facing controls are real HTML buttons rendered inside the battlefield. */
+.unit-action-popover {
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+.unit-action-popover .board-action-chip,
+.unit-action-popover .board-action-chip * {
+  pointer-events: none !important;
+}
+
+.board-unit-action-overlay {
+  overflow: visible;
+  pointer-events: auto;
+}
+.board-unit-action-buttons {
   width: 100%;
-  padding-top: 6px;
-  border-top: 1px solid rgba(101, 76, 45, .14);
+  height: 100%;
+  display: flex;
+  align-items: stretch;
+  gap: 7px;
+  padding: 2px;
+  pointer-events: auto;
 }
-.context-unit-actions-label {
-  flex: 0 0 auto;
-  padding-right: 2px;
-  color: #6f5b43;
-  font-size: 8px;
-  font-weight: 900;
-  letter-spacing: .05em;
-  white-space: nowrap;
-}
-.context-unit-action {
-  flex: 0 1 92px;
-  min-height: 32px;
-  border: 1px solid rgba(255, 244, 217, .28);
-  border-radius: 10px;
-  padding: 6px 10px;
+.board-unit-action-button {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 100%;
+  border: 2px solid rgba(255, 244, 217, .82);
+  border-radius: 14px;
+  padding: 0 9px;
   color: #fff8e8;
   background: #3b3025;
-  box-shadow: 0 3px 8px rgba(39, 27, 17, .15);
-  font-size: 10px;
-  font-weight: 900;
+  box-shadow: 0 7px 18px rgba(39, 27, 17, .32);
+  font-size: 12px;
+  font-weight: 950;
   line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  pointer-events: auto;
+  touch-action: manipulation;
 }
-.context-unit-action.bolster { background: #365d33; }
-.context-unit-action.tactic { background: #5c3f73; }
-.context-unit-action.control { background: #7b5b1d; }
+.board-unit-action-button:hover { filter: brightness(1.08); }
+.board-unit-action-button:active { transform: translateY(1px); }
+.board-unit-action-button.bolster { background: #365d33; }
+.board-unit-action-button.tactic { background: #5c3f73; }
+.board-unit-action-button.control { background: #7b5b1d; }
 
 @media (max-width: 760px), (hover: none) and (pointer: coarse) {
   .integrated-header {
@@ -66,10 +78,7 @@
     padding-bottom: 1px;
     scrollbar-width: none;
   }
-
-  .integrated-header .utility-toolbar::-webkit-scrollbar {
-    display: none;
-  }
+  .integrated-header .utility-toolbar::-webkit-scrollbar { display: none; }
 
   .integrated-header .utility-toggle {
     flex: 0 0 auto;
@@ -116,19 +125,19 @@
     grid-template-columns: minmax(0, 1fr) auto !important;
   }
 
-  .context-unit-actions {
-    overflow-x: auto;
-    scrollbar-width: none;
-  }
-  .context-unit-actions::-webkit-scrollbar { display: none; }
-  .context-unit-action {
-    flex: 1 0 72px;
-    min-height: 36px;
-    padding: 7px 10px;
-    touch-action: manipulation;
+  /* These dimensions are in SVG user units and are intentionally large: the
+     whole board scales down on phones, so this yields finger-sized controls. */
+  .board-unit-action-buttons { gap: 10px; padding: 3px; }
+  .board-unit-action-button {
+    border-width: 3px;
+    border-radius: 18px;
+    padding: 0 13px;
+    font-size: 22px;
+    box-shadow: 0 9px 22px rgba(39, 27, 17, .36);
   }
 
-  /* Treat the unit explanation as a touch modal without changing desktop hover behavior. */
+  /* Touch info card: the next tap anywhere outside gameplay dismisses it and is
+     consumed so the element behind it cannot also activate. */
   .unit-tooltip.visible:not([hidden]) {
     left: 50% !important;
     top: 50% !important;
