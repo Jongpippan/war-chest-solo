@@ -18,7 +18,9 @@ jobs:
           node-version: 22
       - name: Apply staged v0.9 board and UI patch
         if: ${{ hashFiles('.v09/apply.py') != '' }}
-        run: python .v09/apply.py
+        run: |
+          python .v09/apply.py
+          if [ -f .v09/polish.py ]; then python .v09/polish.py; fi
       - name: Install dependencies
         run: npm install --no-package-lock
       - name: Run tests
