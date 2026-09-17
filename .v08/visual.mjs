@@ -27,7 +27,7 @@ for (const [width, height, label] of sizes) {
       const r = el.getBoundingClientRect();
       return { left:r.left, top:r.top, right:r.right, bottom:r.bottom, width:r.width, height:r.height };
     };
-    const selectors = ['.game-header', '.left-rail', '.board-stage', '.right-rail', '#boardHost', '.interaction-hud'];
+    const selectors = ['.integrated-header', '.left-rail', '.board-stage', '.right-rail', '#boardHost', '.interaction-hud'];
     const boxes = Object.fromEntries(selectors.map((s) => [s, rect(s)]));
     return {
       scrollWidth: document.documentElement.scrollWidth,
@@ -35,8 +35,8 @@ for (const [width, height, label] of sizes) {
       innerWidth: window.innerWidth,
       innerHeight: window.innerHeight,
       boxes,
-      headerClass: document.querySelector('header')?.className ?? null,
-      bodyText: document.body.innerText.slice(0, 240),
+      boardTitleDisplay: getComputedStyle(document.querySelector('.board-title')).display,
+      bodyText: document.body.innerText.slice(0, 260),
     };
   });
 
@@ -44,8 +44,9 @@ for (const [width, height, label] of sizes) {
   if (report.scrollWidth > report.innerWidth + 2 || report.scrollHeight > report.innerHeight + 2) {
     throw new Error(`${label}: document overflow ${report.scrollWidth}x${report.scrollHeight} in ${report.innerWidth}x${report.innerHeight}`);
   }
+  if (report.boardTitleDisplay !== 'none') throw new Error(`${label}: board title still consumes vertical space`);
   for (const [name, box] of Object.entries(report.boxes)) {
-    if (!box) throw new Error(`${label}: missing ${name}; header=${report.headerClass}; body=${report.bodyText}`);
+    if (!box) throw new Error(`${label}: missing ${name}`);
     if (box.left < -2 || box.top < -2 || box.right > width + 2 || box.bottom > height + 2) {
       throw new Error(`${label}: ${name} clipped ${JSON.stringify(box)}`);
     }
@@ -54,6 +55,15 @@ for (const [width, height, label] of sizes) {
   const left = report.boxes['.left-rail'];
   const right = report.boxes['.right-rail'];
   if (left.right > board.left + 1 || board.right > right.left + 1) throw new Error(`${label}: columns overlap`);
+
+  const humanSupply = page.locator('.human-side .supply-card').first();
+  if (await humanSupply.count()) {
+    await humanSupply.hover();
+    await page.waitForTimeout(200);
+    if (await page.locator('#unitTooltip.visible').count()) {
+      await page.screenshot({ path: `.v08/screens/tooltip-${label}.png`, fullPage: true });
+    }
+  }
   await page.close();
 }
 
