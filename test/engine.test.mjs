@@ -168,3 +168,33 @@ test('saved games with duplicate unit IDs are repaired before actions resolve', 
   assert.equal(s.boardUnits.find((unit) => unit.owner === 'bot')?.strength, 1);
   assert(s.log.some((line) => line.includes('경기병') && line.includes('정찰병') && line.includes('Attack')));
 });
+
+test('Bolster is atomic: it changes strength but never position', () => {
+  const s = emptyState();
+  s.players.human.hand = ['LIGHT_CAVALRY'];
+  s.boardUnits = [{ id: 'light', owner: 'human', type: 'LIGHT_CAVALRY', hex: '0,0', strength: 1 }];
+  const action = generateActionsForCoin(s, 'human', 'LIGHT_CAVALRY', 'HAND', 0)
+    .find((candidate) => candidate.kind === 'BOLSTER' && candidate.payload.unitId === 'light');
+  assert(action);
+  executeAction(s, action);
+  const light = s.boardUnits.find((unit) => unit.id === 'light');
+  assert.equal(light?.strength, 2);
+  assert.equal(light?.hex, '0,0');
+  assert.equal(s.players.human.hand.length, 0);
+  assert.equal(s.log.filter((line) => line.includes('경기병') && line.includes('이동했습니다')).length, 0);
+});
+
+test('Move is atomic: it changes position but never strength', () => {
+  const s = emptyState();
+  s.players.human.hand = ['LIGHT_CAVALRY'];
+  s.boardUnits = [{ id: 'light', owner: 'human', type: 'LIGHT_CAVALRY', hex: '0,0', strength: 2 }];
+  const action = generateActionsForCoin(s, 'human', 'LIGHT_CAVALRY', 'HAND', 0)
+    .find((candidate) => candidate.kind === 'MOVE' && candidate.payload.unitId === 'light' && candidate.payload.destination === '1,0');
+  assert(action);
+  executeAction(s, action);
+  const light = s.boardUnits.find((unit) => unit.id === 'light');
+  assert.equal(light?.hex, '1,0');
+  assert.equal(light?.strength, 2);
+  assert.equal(s.players.human.hand.length, 0);
+  assert.equal(s.players.human.discard.filter((entry) => entry.coin === 'LIGHT_CAVALRY' && entry.faceUp).length, 1);
+});
