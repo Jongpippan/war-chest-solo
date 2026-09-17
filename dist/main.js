@@ -288,7 +288,7 @@ function renderUnitDiagram(type) {
   </svg>`;
 }
 function ruleSectionsHtml(type) {
-    return `<div class="rule-sections">${UNIT_CARD_RULES[type].map((section) => `<div class="rule-section ${section.kind.toLowerCase()}"><span class="rule-kind">${section.title}</span><p>${esc(section.text)}</p></div>`).join('')}</div>`;
+    return `<div class="rule-sections">${UNIT_CARD_RULES[type].map((section) => `<div class="rule-section ${section.kind.toLowerCase()}"><span class="rule-kind">${section.kind}</span><p>${formatGameText(section.text)}</p></div>`).join('')}</div>`;
 }
 function randomSubset(items, count) {
     const copy = [...items];
@@ -669,7 +669,7 @@ function renderSetup() {
     bindUnitInfoInteractions();
 }
 function playerName(id) {
-    return id === 'human' ? '당신' : '봇';
+    return id === 'human' ? 'YOU' : 'BOT';
 }
 function coinBackSvg() {
     return `<svg viewBox="0 0 24 24" class="coin-back-icon" aria-hidden="true">
@@ -705,7 +705,7 @@ function renderHandZone(id) {
     const coins = p.hand.map((coin, index) => id === 'human'
         ? tableCoin(coin, { owner: 'human', index, className: index === selectedCoinIndex ? 'selected' : '' })
         : tableCoin(null, { faceUp: false }));
-    return `<div class="resource-zone hand-zone"><div class="resource-label"><span>HAND</span><b>${p.hand.length}</b></div><div class="coin-fan">${coins.join('') || '<span class="empty-zone">비어 있음</span>'}</div></div>`;
+    return `<div class="resource-zone hand-zone"><div class="resource-label"><span>HAND</span><b>${p.hand.length}</b></div><div class="coin-fan">${coins.join('') || '<span class="empty-zone">EMPTY</span>'}</div></div>`;
 }
 function renderBagZone(id) {
     if (!state)
@@ -888,16 +888,16 @@ function renderInteractionHud(actions) {
 }
 function axialToPixel(id) {
     const { q, r } = parseHex(id);
-    const size = 36;
+    const size = 39;
     return {
-        x: 480 + size * Math.sqrt(3) * (q + r / 2),
-        y: 338 + size * 1.5 * r,
+        x: 480 + size * 1.5 * q,
+        y: 338 + size * Math.sqrt(3) * (r + q / 2),
     };
 }
-function hexPoints(cx, cy, size = 31) {
+function hexPoints(cx, cy, size = 34) {
     const pts = [];
     for (let i = 0; i < 6; i += 1) {
-        const angle = (Math.PI / 180) * (60 * i - 30);
+        const angle = (Math.PI / 180) * (60 * i);
         pts.push(`${(cx + size * Math.cos(angle)).toFixed(2)},${(cy + size * Math.sin(angle)).toFixed(2)}`);
     }
     return pts.join(' ');
@@ -907,8 +907,8 @@ function inactiveCluster(cx, cy, size = 28) {
         [0, 0], [1, 0], [0, 1], [-1, 1], [-1, 0], [0, -1], [1, -1],
     ];
     const pts = offsets.map(([q, r]) => {
-        const x = cx + size * Math.sqrt(3) * (q + r / 2);
-        const y = cy + size * 1.5 * r;
+        const x = cx + size * 1.5 * q;
+        const y = cy + size * Math.sqrt(3) * (r + q / 2);
         return `<polygon points="${hexPoints(x, y, size - 2)}" fill="rgba(215,114,95,.55)" stroke="rgba(144,77,63,.45)" stroke-width="1.5"/>`;
     }).join('');
     return `<g class="inactive-cluster">${pts}</g>`;
@@ -933,8 +933,9 @@ function renderBoardSvg(actions = []) {
                 : isLocation
                     ? '#ead9a9'
                     : '#e9d8b3';
+        const locationColor = controller === 'human' ? '#277c80' : controller === 'bot' ? '#a34c58' : '#b68a2a';
         const locationMark = isLocation
-            ? `<g class="location-emblem"><circle cx="${x}" cy="${y}" r="18" fill="rgba(255,250,241,.8)" stroke="${controller === 'human' ? '#2c6f77' : controller === 'bot' ? '#91454e' : '#9c7c3e'}" stroke-width="2.5"/><circle cx="${x}" cy="${y}" r="8.5" fill="${controller === 'human' ? '#2c6f77' : controller === 'bot' ? '#91454e' : '#b0904c'}" opacity=".85"/></g>`
+            ? `<g class="location-emblem ${controller ?? 'neutral'}"><polygon points="${hexPoints(x, y, 27)}" fill="rgba(255,250,232,.72)" stroke="${locationColor}" stroke-width="3.6"/><circle cx="${x}" cy="${y}" r="14" fill="rgba(255,248,219,.95)" stroke="${locationColor}" stroke-width="2.6"/><path d="M ${x - 8} ${y} C ${x - 4} ${y - 8}, ${x + 4} ${y - 8}, ${x + 8} ${y} C ${x + 4} ${y + 8}, ${x - 4} ${y + 8}, ${x - 8} ${y} Z" fill="none" stroke="${locationColor}" stroke-width="2"/><circle cx="${x}" cy="${y}" r="3.2" fill="${locationColor}"/></g>`
             : '';
         let unitMark = '';
         let badges = '';
@@ -965,9 +966,9 @@ function renderBoardSvg(actions = []) {
                 }).join('');
             }
         }
-        return `<g class="hex-cell ${preview ? 'preview' : ''} ${hexCls}"${hexAttr}><polygon points="${hexPoints(x, y)}" fill="${fill}" stroke="${preview ? '#f4c65d' : '#b59558'}" stroke-width="${preview ? 4 : 1.6}"/>${locationMark}${unitMark}${badges}</g>`;
+        return `<g class="hex-cell ${isLocation ? 'location-hex' : ''} ${controller ? `controlled-${controller}` : ''} ${preview ? 'preview' : ''} ${hexCls}"${hexAttr}><polygon points="${hexPoints(x, y)}" fill="${fill}" stroke="${preview ? '#f4c65d' : '#b59558'}" stroke-width="${preview ? 4 : 1.6}"/>${locationMark}${unitMark}${badges}</g>`;
     }).join('');
-    return `<svg class="battlefield" viewBox="0 0 960 680" role="img" aria-label="War Chest battlefield">
+    return `<svg class="battlefield" viewBox="54 58 852 560" role="img" aria-label="War Chest battlefield">
     <defs>
       <pattern id="woodGrain" width="24" height="24" patternUnits="userSpaceOnUse">
         <rect width="24" height="24" fill="#6d4f34"/>
@@ -980,10 +981,10 @@ function renderBoardSvg(actions = []) {
     <rect x="68" y="118" width="824" height="444" rx="18" fill="#efe1bb" opacity=".28"/>
     <polygon points="260,86 700,86 860,240 860,438 700,592 260,592 100,438 100,240" fill="#f3e3b8" stroke="#d2b57a" stroke-width="4"/>
     <polygon points="300,126 660,126 812,250 812,428 660,552 300,552 148,428 148,250" fill="#ecd9ab" stroke="#d4b77b" stroke-width="2.5"/>
-    ${inactiveCluster(208, 339)}
-    ${inactiveCluster(752, 339)}
-    <rect x="430" y="82" width="100" height="42" rx="10" fill="#a8a5a9" opacity=".55"/>
-    <rect x="430" y="556" width="100" height="42" rx="10" fill="#a8a5a9" opacity=".55"/>
+    ${inactiveCluster(221, 338, 31)}
+    ${inactiveCluster(739, 338, 31)}
+    <rect x="435" y="70" width="90" height="28" rx="8" fill="#a8a5a9" opacity=".42"/>
+    <rect x="435" y="578" width="90" height="28" rx="8" fill="#a8a5a9" opacity=".42"/>
     ${hexes}
   </svg>`;
 }
@@ -1093,13 +1094,18 @@ function renderLog() {
     const entries = [...state.log].slice(-12).reverse();
     return `<section class="log-panel"><div class="eyebrow">BATTLE LOG</div><h3>Recent actions</h3><ol>${entries.map((x) => `<li>${formatGameText(x)}</li>`).join('')}</ol></section>`;
 }
-function renderStatusBar(actions = []) {
+function renderHeaderControls(actions = []) {
     if (!state)
         return '';
     const active = state.activePlayer === 'human' ? 'YOUR TURN' : 'BOT TURN';
     const claim = actions.find((a) => a.kind === 'CLAIM_INITIATIVE');
     const owner = state.initiative === 'human' ? 'YOU' : 'BOT';
-    return `<div class="status-bar"><span><b>Round ${state.round}</b></span><span class="turn-pill ${state.activePlayer}">${active}</span><button type="button" id="claimInitiativeToken" class="initiative-token-control ${state.initiative === 'human' ? 'human-owned' : 'bot-owned'} ${claim ? 'actionable' : ''}" ${claim ? '' : 'disabled'}><span class="initiative-medallion">◆</span><span>${gameTerm('Initiative')} <b>${owner}</b></span></button><span class="difficulty-chip">BOT ${difficultyLabel(difficulty)}</span><div class="utility-toolbar"><button type="button" class="utility-toggle ${utilityPanel === 'analysis' ? 'active' : ''}" data-utility="analysis">◎ ANALYSIS</button><button type="button" class="utility-toggle ${utilityPanel === 'bot' ? 'active' : ''}" data-utility="bot">◇ BOT</button><button type="button" class="utility-toggle ${utilityPanel === 'log' ? 'active' : ''}" data-utility="log">≡ LOG</button></div></div>`;
+    return `<div class="header-game-meta"><span class="round-chip">ROUND <b>${state.round}</b></span><span class="turn-chip ${state.activePlayer}">${active}</span><button type="button" id="claimInitiativeToken" class="initiative-token-control ${state.initiative === 'human' ? 'human-owned' : 'bot-owned'} ${claim ? 'actionable' : ''}" ${claim ? '' : 'disabled'}><span class="initiative-medallion">◆</span><span>${gameTerm('Initiative')} <b>${owner}</b></span></button><span class="difficulty-chip">BOT ${difficultyLabel(difficulty)}</span></div><div class="utility-toolbar"><button type="button" class="utility-toggle ${utilityPanel === 'analysis' ? 'active' : ''}" data-utility="analysis">◎ ANALYSIS</button><button type="button" class="utility-toggle ${utilityPanel === 'bot' ? 'active' : ''}" data-utility="bot">◇ BOT</button><button type="button" class="utility-toggle ${utilityPanel === 'log' ? 'active' : ''}" data-utility="log">≡ LOG</button></div>`;
+}
+function renderBotLastAction() {
+    if (!lastBotThought)
+        return '<div class="bot-last-action idle"><span>BOT LAST ACTION</span><strong>Waiting for the bot to act</strong></div>';
+    return `<div class="bot-last-action"><span>BOT LAST ACTION · ROUND ${lastBotThought.round}</span><strong>${formatGameText(lastBotThought.label)}</strong><small>${formatGameText(lastBotThought.reason)}</small></div>`;
 }
 function renderUtilityDrawer() {
     if (!utilityPanel)
@@ -1128,16 +1134,15 @@ function renderGame() {
     const actions = state.activePlayer === 'human' && !state.winner ? humanCandidates() : [];
     const sanity = stateSanity(state);
     app.innerHTML = `<main class="game-shell">
-    <header class="topbar compact"><div><div class="eyebrow">LOCAL SOLO · DIRECT TABLE INPUT</div><h1>War Chest Solo</h1></div><div class="topbar-actions"><button id="undoBtn" class="ghost" ${undoStack.length && !botBusy ? '' : 'disabled'}>↶ Undo</button><button id="rulesBtn" class="ghost">Rules</button><button id="restartBtn" class="ghost danger">Restart</button></div></header>
-    ${renderStatusBar(actions)}
+    <header class="topbar compact integrated-header"><div class="brand-lockup"><div class="eyebrow">LOCAL SOLO · DIRECT TABLE INPUT</div><h1>War Chest Solo</h1></div><div class="header-center">${renderHeaderControls(actions)}${renderBotLastAction()}</div><div class="topbar-actions"><button id="undoBtn" class="ghost" ${undoStack.length && !botBusy ? '' : 'disabled'}>↶ Undo</button><button id="rulesBtn" class="ghost">Rules</button><button id="restartBtn" class="ghost danger">Restart</button></div></header>
     ${sanity.length ? `<div class="debug-warning">State warning: ${esc(sanity.join(' / '))}</div>` : ''}
     <section class="workspace-grid direct-table-layout">
       <aside class="left-rail player-rail bot-side">${renderPlayerPanel('bot', actions)}</aside>
-      <section class="board-stage"><div class="board-panel"><div class="board-title"><div><div class="eyebrow">BATTLEFIELD</div><h2>Direct Battlefield</h2></div><div class="board-legend"><span><i class="legend-dot bot"></i>BOT</span><span><i class="legend-dot human"></i>YOU</span><span><i class="legend-location"></i>Location</span></div></div>${renderInteractionHud(actions)}<div id="boardHost">${renderBoardSvg(actions)}</div></div></section>
+      <section class="board-stage"><div class="board-panel"><div class="board-title"><div><div class="eyebrow">BATTLEFIELD</div><h2>2-Player Battlefield</h2></div><div class="board-legend"><span><i class="legend-dot bot"></i>BOT</span><span><i class="legend-dot human"></i>YOU</span><span><i class="legend-location"></i>LOCATION</span></div></div><div id="boardHost">${renderBoardSvg(actions)}</div>${renderInteractionHud(actions)}</div></section>
       <aside class="right-rail player-rail human-side">${renderPlayerPanel('human', actions)}</aside>
     </section>
     ${renderUtilityDrawer()}
-    <dialog id="rulesDialog" class="rules-dialog"><form method="dialog"><button class="dialog-close">×</button></form><div class="eyebrow">QUICK RULES</div><h2>Core actions</h2><p>Draw up to 3 Coins each Round and alternate spending one Coin at a time.</p><ul><li>${gameTerm('Deploy')} / ${gameTerm('Bolster')}: place the Unit Coin directly on the Battlefield.</li><li>Face-down: ${gameTerm('Claim Initiative')}, ${gameTerm('Recruit')}, ${gameTerm('Pass')}.</li><li>Face-up ${gameTerm('Maneuver')}: ${gameTerm('Move')}, ${gameTerm('Attack')}, ${gameTerm('Control')}, or ${gameTerm('Tactic')}.</li><li>Win immediately after placing all 6 Control Markers.</li></ul></dialog>
+    <dialog id="rulesDialog" class="rules-dialog"><form method="dialog"><button class="dialog-close">×</button></form><div class="eyebrow">QUICK RULES</div><h2>Core actions</h2><p>Draw up to 3 Coins each Round and alternate spending one Coin at a time.</p><ul><li>${gameTerm('Deploy')} / ${gameTerm('Bolster')}: place the Unit Coin on an empty controlled Location (Scout is the adjacency exception).</li><li>Face-down: ${gameTerm('Claim Initiative')}, ${gameTerm('Recruit')}, ${gameTerm('Pass')}.</li><li>Face-up ${gameTerm('Maneuver')}: ${gameTerm('Move')}, ${gameTerm('Attack')}, ${gameTerm('Control')}, or ${gameTerm('Tactic')}.</li><li>Win immediately after placing all 6 Control Markers.</li></ul></dialog>
     <div id="unitTooltip" class="unit-tooltip" hidden></div>
   </main>`;
     document.querySelector('#restartBtn')?.addEventListener('click', () => { if (confirm('Restart the current game?'))

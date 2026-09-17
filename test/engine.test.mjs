@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createGame, generateActionsForCoin, executeAction, stateSanity, unitsOf } from '../dist/engine.js';
-import { hexId } from '../dist/board.js';
+import { hexId, ALL_LOCATIONS, HUMAN_STARTS, BOT_STARTS, NEUTRAL_LOCATIONS } from '../dist/board.js';
 
 const H = ['ARCHER', 'PIKEMAN', 'SCOUT', 'KNIGHT'];
 const B = ['CROSSBOWMAN', 'CAVALRY', 'LANCER', 'ROYAL_GUARD'];
@@ -86,4 +86,24 @@ test('Pikeman retaliation removes one attacker coin', () => {
   executeAction(s, action);
   assert.equal(attacker.strength, 1);
   assert.equal(s.boardUnits.some((u) => u.id === pike.id), false);
+});
+
+
+test('standard Deploy targets only empty controlled Locations', () => {
+  const s = cleanGame();
+  s.players.human.hand = ['ARCHER'];
+  const deploys = generateActionsForCoin(s, 'human', 'ARCHER', 'HAND', 0).filter((a) => a.kind === 'DEPLOY');
+  assert(deploys.length > 0);
+  for (const action of deploys) {
+    const hex = action.payload.destination;
+    assert(hex);
+    assert(ALL_LOCATIONS.includes(hex));
+    assert.equal(s.locations[hex], 'human');
+  }
+});
+
+test('2-player physical starting and neutral Locations match the base board', () => {
+  assert.deepEqual(HUMAN_STARTS, [hexId(-2, 3), hexId(1, 2)]);
+  assert.deepEqual(BOT_STARTS, [hexId(-1, -2), hexId(2, -3)]);
+  assert.deepEqual(new Set(NEUTRAL_LOCATIONS), new Set([hexId(-2, 0), hexId(2, 0), hexId(1, -1), hexId(-1, 1), hexId(3, -2), hexId(-3, 2)]));
 });

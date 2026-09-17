@@ -1,3 +1,4 @@
+@import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css");
 :root {
   --bg: #19140f;
   --bg-2: #2a1f17;
@@ -1434,4 +1435,188 @@ button.discard-zone { cursor: pointer; }
   .interaction-hud { grid-template-columns: auto minmax(0, 1fr) auto; }
   .face-down-guide { display: none; }
   .supply-name small { display: none; }
+}
+
+
+/* v0.8 board-accuracy + one-screen UX pass */
+:root { --font-ui: "Pretendard", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+html, body, button, input, select, textarea { font-family: var(--font-ui) !important; }
+body:has(.game-shell) { overflow: hidden; }
+.game-shell {
+  height: 100dvh;
+  max-width: 1800px;
+  padding: 6px 10px 8px;
+  gap: 6px;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+.integrated-header {
+  min-height: 58px;
+  display: grid;
+  grid-template-columns: minmax(170px, .72fr) minmax(520px, 2.1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 5px 8px;
+}
+.brand-lockup { min-width: 0; }
+.brand-lockup h1 { margin: 1px 0 0; font-size: clamp(20px, 1.7vw, 27px); line-height: 1; white-space: nowrap; }
+.brand-lockup .eyebrow { font-size: 8px; }
+.header-center { min-width: 0; display: grid; grid-template-columns: auto minmax(180px, 1fr); gap: 8px; align-items: center; }
+.header-game-meta { min-width: 0; display: flex; align-items: center; gap: 5px; flex-wrap: nowrap; }
+.header-game-meta > span, .round-chip, .turn-chip { white-space: nowrap; }
+.round-chip, .turn-chip, .difficulty-chip {
+  border-radius: 999px;
+  padding: 5px 8px;
+  background: rgba(255,255,255,.46);
+  border: 1px solid rgba(101,77,48,.14);
+  color: #5f4b34;
+  font-size: 9px;
+  font-weight: 850;
+}
+.turn-chip.human { background: rgba(47,115,122,.13); color: #275f66; }
+.turn-chip.bot { background: rgba(149,76,84,.12); color: #8d4650; }
+.integrated-header .initiative-token-control { padding: 3px 7px 3px 4px; }
+.integrated-header .initiative-medallion { width: 22px; height: 22px; }
+.integrated-header .utility-toolbar { margin-left: 0; }
+.integrated-header .utility-toggle { padding: 4px 6px; font-size: 8px; }
+.integrated-header .topbar-actions { justify-content: flex-end; gap: 5px; }
+.integrated-header .topbar-actions .ghost { padding: 6px 8px; font-size: 10px; }
+
+.bot-last-action {
+  min-width: 0;
+  border-radius: 10px;
+  padding: 5px 8px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas: "tag action" "tag reason";
+  column-gap: 8px;
+  background: linear-gradient(90deg, rgba(149,76,84,.12), rgba(255,255,255,.36));
+  border: 1px solid rgba(149,76,84,.18);
+  overflow: hidden;
+}
+.bot-last-action > span { grid-area: tag; align-self: center; color: #8d4650; font-size: 7.5px; font-weight: 950; letter-spacing: .06em; white-space: nowrap; }
+.bot-last-action > strong { grid-area: action; min-width: 0; color: #44352a; font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bot-last-action > small { grid-area: reason; min-width: 0; color: #796856; font-size: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bot-last-action.idle { opacity: .58; }
+
+.status-bar { display: none !important; }
+.direct-table-layout.workspace-grid {
+  min-height: 0;
+  height: 100%;
+  grid-template-columns: minmax(245px, 292px) minmax(560px, 1fr) minmax(245px, 292px);
+  gap: 7px;
+}
+.board-stage, .board-panel, #boardHost { min-height: 0; }
+.board-panel {
+  height: 100%;
+  padding: 5px 6px 6px;
+  gap: 3px;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+.board-title { min-height: 28px; }
+.board-title h2 { margin: 0; font-size: 14px; line-height: 1; }
+.board-title .eyebrow { font-size: 7px; }
+.board-legend { font-size: 8px; gap: 6px; }
+#boardHost {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+}
+.battlefield {
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  object-fit: contain;
+}
+.interaction-hud {
+  margin-top: 1px;
+  padding: 5px 7px;
+  gap: 7px;
+  border-radius: 10px;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+}
+.selected-coin-hud { min-width: 102px; }
+.selected-coin-hud .table-coin.static { width: 34px; height: 34px; }
+.interaction-copy > strong { font-size: 10px; }
+.interaction-copy > span, .face-down-guide { font-size: 8px; line-height: 1.25; }
+.interaction-legend { font-size: 8px; white-space: normal; }
+.micro-action { padding: 4px 7px; font-size: 8px; }
+
+/* Locations should read before Units. */
+.hex-cell.location-hex > polygon {
+  fill: #f2dfa2 !important;
+  stroke: #b1872c !important;
+  stroke-width: 3 !important;
+  filter: drop-shadow(0 0 3px rgba(164,122,31,.25));
+}
+.hex-cell.location-hex.controlled-human > polygon { fill: #b8dfdc !important; stroke: #277c80 !important; }
+.hex-cell.location-hex.controlled-bot > polygon { fill: #ecc6c9 !important; stroke: #a34c58 !important; }
+.location-emblem { pointer-events: none; }
+.location-emblem polygon { filter: drop-shadow(0 1px 2px rgba(69,49,24,.15)); }
+.legend-location { box-shadow: inset 0 0 0 3px #b1872c; background: #f2dfa2; }
+
+/* Keep dense side panels legible instead of clipping text. */
+.tabletop-player { padding: 7px; gap: 4px; }
+.tabletop-heading h2 { font-size: 15px; }
+.control-score strong { font-size: 16px; }
+.control-score span { font-size: 7px; }
+.resource-zone { padding: 5px 6px !important; }
+.resource-label span { font-size: 7px; }
+.supply-heading span { font-size: 7.5px; }
+.supply-heading small { font-size: 7px; }
+.tabletop-player.bot .supply-grid,
+.tabletop-player.human .supply-grid { grid-auto-rows: minmax(74px, 1fr); gap: 4px; }
+.supply-card { overflow: visible; }
+.supply-name strong { font-size: 9px; }
+.supply-name small { font-size: 6.8px; }
+.supply-stats span { font-size: 6px !important; white-space: nowrap; }
+.supply-stats b { font-size: 8px !important; }
+
+/* Unit cards: English rule labels, colored English game terminology. */
+.rule-kind { min-width: 68px; font-size: 8px; letter-spacing: .055em; }
+.rule-section { grid-template-columns: 72px minmax(0,1fr); gap: 8px; }
+.rule-section p { font-family: var(--font-ui); font-size: 11px; line-height: 1.45; word-break: keep-all; }
+.rule-section .game-term { font-weight: 900; }
+.tooltip-title-wrap h4, .tooltip-meta, .diagram-caption { font-family: var(--font-ui); }
+
+.utility-drawer { top: 68px; max-height: calc(100% - 80px); }
+
+@media (max-height: 820px) and (min-width: 1101px) {
+  .game-shell { padding-top: 4px; gap: 4px; }
+  .integrated-header { min-height: 50px; padding: 3px 6px; }
+  .brand-lockup h1 { font-size: 20px; }
+  .bot-last-action > small { display: none; }
+  .bot-last-action { grid-template-areas: "tag action"; }
+  .board-title { min-height: 23px; }
+  .board-panel { padding: 3px 4px 4px; gap: 2px; }
+  .interaction-hud { padding: 3px 5px; }
+  .interaction-copy > span { display: none; }
+  .tabletop-player { padding: 5px; gap: 3px; }
+  .tabletop-player.bot .supply-grid,
+  .tabletop-player.human .supply-grid { grid-auto-rows: 66px; }
+  .table-coin { width: 32px; height: 32px; }
+  .table-coin .unit-icon { width: 17px; height: 17px; }
+}
+
+@media (max-width: 1320px) and (min-width: 1101px) {
+  .integrated-header { grid-template-columns: 155px minmax(0, 1fr) auto; gap: 7px; }
+  .header-center { grid-template-columns: auto minmax(130px, 1fr); gap: 5px; }
+  .round-chip, .turn-chip, .difficulty-chip { padding: 4px 6px; font-size: 8px; }
+  .integrated-header .utility-toggle { font-size: 7px; padding: 3px 5px; }
+  .bot-last-action > small { display: none; }
+  .bot-last-action { grid-template-areas: "tag action"; }
+  .direct-table-layout.workspace-grid { grid-template-columns: minmax(222px, 252px) minmax(500px, 1fr) minmax(222px, 252px); gap: 5px; }
+  .face-down-guide { display: none; }
+  .supply-name small, .supply-heading small { display: none; }
+}
+
+@media (max-width: 1100px) {
+  body:has(.game-shell) { overflow: auto; }
+  .game-shell { height: auto; min-height: 100dvh; overflow: visible; }
+  .integrated-header { grid-template-columns: 1fr; }
+  .header-center { grid-template-columns: 1fr; }
+  .direct-table-layout.workspace-grid { grid-template-columns: 1fr; height: auto; }
+  .board-panel { min-height: 620px; }
 }
