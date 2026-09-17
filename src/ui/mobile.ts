@@ -174,9 +174,10 @@ function onGeneratedActionClick(event: MouseEvent): void {
 
   const key = button.dataset.proxyBoardKey;
   if (!key) return;
-  const source = Array.from(document.querySelectorAll<HTMLElement>('[data-board-key]'))
-    .find((candidate) => candidate.dataset.boardKey === key && candidate.closest('.unit-action-popover'));
-  source?.click();
+  const source = Array.from(document.querySelectorAll<Element>('[data-board-key]'))
+    .find((candidate) => (candidate as HTMLElement).dataset.boardKey === key && candidate.closest('.unit-action-popover'));
+  if (!source) return;
+  source.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
 }
 
 function startMobileUi(): void {
