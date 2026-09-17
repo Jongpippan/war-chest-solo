@@ -1,0 +1,85 @@
+/* Final legibility pass after 1280/1366/1440 visual verification. */
+.integrated-header .ghost {
+  color: #4a3928 !important;
+  background: rgba(255,255,255,.54) !important;
+  border-color: rgba(89,65,39,.22) !important;
+  box-shadow: inset 0 1px rgba(255,255,255,.65);
+}
+.integrated-header .ghost:hover {
+  color: #2e2117 !important;
+  background: #fff9ed !important;
+  border-color: rgba(89,65,39,.38) !important;
+}
+.integrated-header .ghost.danger {
+  color: #923f46 !important;
+  border-color: rgba(146,63,70,.28) !important;
+}
+
+/* Unit Supply is primarily a physical coin supply during play. Keep the one
+   number that matters at small desktop widths and avoid unreadable microcopy. */
+.supply-stats {
+  display: flex !important;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px !important;
+  min-width: 0;
+  white-space: nowrap;
+}
+.supply-stats span {
+  min-width: 0;
+  font-size: 7px !important;
+  line-height: 1 !important;
+  letter-spacing: .02em;
+}
+.supply-stats b {
+  display: inline !important;
+  margin-left: 2px;
+  font-size: 9px !important;
+}
+@media (max-width: 1366px) and (min-width: 1101px) {
+  .supply-stats span:not(:first-child) { display: none !important; }
+  .supply-stats span:first-child { font-size: 8px !important; font-weight: 800; }
+  .supply-stats span:first-child b { font-size: 10px !important; }
+  .supply-card-foot { grid-template-columns: minmax(38px,.8fr) auto !important; }
+}
+
+/* Make the most recent bot move visually persistent instead of letting it
+   disappear into the header chrome after the board rerenders. */
+.bot-last-action {
+  position: relative;
+  overflow: hidden;
+}
+.bot-last-action::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--bot);
+}
+.bot-last-action > strong { min-width: 0; }
+
+/* The board title strip is intentionally removed: the battlefield itself and
+   the interaction strip below it now consume the full available height. */
+.board-title { display: none !important; }
+.board-panel { padding: 0 !important; gap: 0 !important; }
+
+/* Location spaces must read before normal hexes even when occupied. */
+.location-emblem circle:first-child {
+  stroke-width: 5px !important;
+}
+.location-emblem.neutral circle:first-child {
+  fill: rgba(248,252,232,.96) !important;
+}
+
+/* Small screen table copy: never let labels collide with values. */
+.resource-label,
+.supply-card-head,
+.supply-card-foot,
+.header-game-meta { min-width: 0; }
+.resource-label span,
+.resource-label b,
+.supply-name strong,
+.supply-name small { white-space: nowrap; }
+.supply-name { overflow: hidden; }
+.supply-name strong,
+.supply-name small { overflow: hidden; text-overflow: ellipsis; }
