@@ -4,30 +4,53 @@ import { chromium } from 'playwright';
 const baseUrl = process.env.WAR_CHEST_TEST_URL ?? 'http://127.0.0.1:4173/';
 const browser = await chromium.launch({ headless: true });
 
-async function injectSyntheticActions(page) {
-  await page.evaluate(() => {
-    const board = document.querySelector('.battlefield');
-    if (!board) throw new Error('Battlefield missing');
-    const ns = 'http://www.w3.org/2000/svg';
-    const popover = document.createElementNS(ns, 'g');
-    popover.classList.add('unit-action-popover');
-    popover.dataset.actionFor = 'synthetic-unit';
-    for (const [key, cls, label] of [
-      ['special:BOLSTER', 'bolster', 'BOLSTER'],
-      ['special:TACTIC', 'tactic', 'TACTIC'],
-      ['special:CONTROL', 'control', 'CONTROL'],
-    ]) {
-      const source = document.createElementNS(ns, 'g');
-      source.classList.add('board-action-chip', cls);
-      source.dataset.boardKey = key;
-      source.textContent = label;
-      source.addEventListener('click', () => {
-        document.documentElement.dataset.contextProxyHit = key;
-      });
-      popover.append(source);
-    }
-    board.append(popover);
+async function seedLightCavalryGame(page) {
+  await page.evaluate(async () => {
+    const { createGame } = await import('./dist/engine.js');
+    const state = createGame(
+      ['LIGHT_CAVALRY', 'ARCHER', 'FOOTMAN', 'PIKEMAN'],
+      ['CAVALRY', 'KNIGHT', 'SCOUT', 'SWORDSMAN'],
+      'human',
+    );
+
+    state.activePlayer = 'human';
+    state.initiative = 'human';
+    state.players.human.hand = ['LIGHT_CAVALRY'];
+    state.players.human.bag = [];
+    state.players.human.discard = [];
+    state.boardUnits = [
+      { id: 'u-test-light', owner: 'human', type: 'LIGHT_CAVALRY', hex: '0,0', strength: 1 },
+    ];
+    state.log.push('봇 테스트 행동: 대기');
+    localStorage.setItem('war-chest-solo-local-v2', JSON.stringify(state));
   });
+
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.locator('#resumeBtn').click();
+  await page.waitForSelector('.battlefield');
+}
+
+async function assertRealUnitActions(page, viewportName) {
+  const unit = page.locator('.unit-token[data-unit-type="LIGHT_CAVALRY"][data-board-key]').first();
+  await unit.click();
+
+  await page.waitForSelector('.unit-action-popover');
+  await page.waitForSelector('.context-unit-actions');
+
+  const labels = await page.locator('.context-unit-action').allTextContents();
+  assert.ok(labels.includes('증원'), `${viewportName}: Bolster must be surfaced for a deployed matching Unit`);
+  assert.ok(labels.includes('전술'), `${viewportName}: Tactic must be surfaced for Light Cavalry`);
+  assert.equal(await page.locator('.context-unit-actions').isVisible(), true, `${viewportName}: selected Unit action bar must be visible`);
+
+  // Use the real generated action, not a synthetic SVG fixture. This catches the
+  // original regression where the board path existed but the contextual actions
+  // were effectively unavailable to the player.
+  await page.locator('.context-unit-action.bolster').click();
+  await page.waitForTimeout(1050);
+
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('war-chest-solo-local-v2') || 'null'));
+  const light = saved?.boardUnits?.find((candidate) => candidate.id === 'u-test-light');
+  assert.equal(light?.strength, 2, `${viewportName}: Bolster button must execute the real game action`);
 }
 
 try {
@@ -36,7 +59,6 @@ try {
     isMobile: true,
     hasTouch: true,
   });
-
   await mobileContext.addInitScript(() => {
     Math.random = () => 0.1;
   });
@@ -64,48 +86,26 @@ try {
   assert.equal(await secondUnit.evaluate((element) => element.classList.contains('selected')), secondSelectedBefore, 'underlying Unit card must not receive the dismiss tap');
   assert.equal(await page.locator('#unitTooltip').evaluate((element) => element.hidden), true, 'dismiss tap must close the Unit tooltip');
 
-  await page.locator('#startBtn').click();
-  await page.waitForSelector('.integrated-header');
+  await seedLightCavalryGame(page);
   await page.waitForSelector('.mobile-bot-last-action');
   assert.equal(await page.locator('[data-utility="log"]').isVisible(), true, 'Log button must be visible on mobile');
   assert.equal(await page.locator('.utility-toolbar').isVisible(), true, 'utility toolbar must be visible on mobile');
   assert.equal(await page.locator('.mobile-bot-last-action').isVisible(), true, 'last bot action panel must be visible on mobile');
-
-  await injectSyntheticActions(page);
-  await page.waitForSelector('.context-unit-actions');
-  const labels = await page.locator('.context-unit-action').allTextContents();
-  assert.deepEqual(labels, ['증원', '전술', '점령'], 'shared action bar must expose the selected Unit actions on mobile');
-  await page.locator('.context-unit-action.tactic').click();
-  assert.equal(await page.locator('html').getAttribute('data-context-proxy-hit'), 'special:TACTIC', 'mobile action must forward to the original board action');
-
-  await page.evaluate(() => {
-    const toast = document.createElement('div');
-    toast.className = 'action-playback-toast bot';
-    toast.innerHTML = '<strong>테스트 봇 전술 행동</strong>';
-    document.body.append(toast);
-  });
-  await page.waitForFunction(() => document.querySelector('.mobile-bot-last-action strong')?.textContent === '테스트 봇 전술 행동');
+  await assertRealUnitActions(page, 'mobile');
   await mobileContext.close();
 
-  // Desktop regression: the same selected-Unit actions must be surfaced even
-  // though the mobile-only header helpers are not active.
   const desktopContext = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   await desktopContext.addInitScript(() => {
     Math.random = () => 0.1;
   });
   const desktopPage = await desktopContext.newPage();
   await desktopPage.goto(baseUrl, { waitUntil: 'networkidle' });
-  await desktopPage.locator('#startBtn').click();
-  await desktopPage.waitForSelector('.battlefield');
-  await injectSyntheticActions(desktopPage);
-  await desktopPage.waitForSelector('.context-unit-actions');
-  assert.equal(await desktopPage.locator('.context-unit-actions').isVisible(), true, 'selected Unit action bar must be visible on desktop');
-  await desktopPage.locator('.context-unit-action.bolster').click();
-  assert.equal(await desktopPage.locator('html').getAttribute('data-context-proxy-hit'), 'special:BOLSTER', 'desktop action must forward to the original board action');
+  await seedLightCavalryGame(desktopPage);
+  await assertRealUnitActions(desktopPage, 'desktop');
   assert.equal(await desktopPage.locator('.mobile-bot-last-action').count(), 0, 'mobile-only bot summary must stay off desktop');
   await desktopContext.close();
 
-  console.log('responsive UI regression checks passed');
+  console.log('responsive real-game UI regression checks passed');
 } finally {
   await browser.close();
 }
