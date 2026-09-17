@@ -26,7 +26,7 @@ function closeUnitTooltip(): void {
 }
 
 function isGameplayActionTarget(target: EventTarget | null): boolean {
-  return target instanceof Element && Boolean(target.closest('[data-board-key], [data-proxy-board-key]'));
+  return target instanceof Element && Boolean(target.closest('[data-board-key]'));
 }
 
 function onMouseEnterCapture(event: MouseEvent): void {
@@ -36,9 +36,8 @@ function onMouseEnterCapture(event: MouseEvent): void {
   if (!target.closest('.unit-token[data-board-key]')) return;
 
   // Touch browsers and Playwright may synthesize mouseenter immediately before a
-  // tap. The generic Unit hover listener would then open the full-screen mobile
-  // tooltip on top of the battlefield and steal the actual Unit tap. Actionable
-  // battlefield Units use tap for gameplay, so suppress that synthetic hover.
+  // tap. Actionable battlefield Units use tap for gameplay, so do not let the
+  // full-screen Unit tooltip cover the selected Unit and its action buttons.
   event.stopImmediatePropagation();
   closeUnitTooltip();
 }
@@ -48,9 +47,7 @@ function onPointerDownCapture(event: PointerEvent): void {
   tooltipVisibleAtPointerDown = Boolean(visibleUnitTooltip());
 
   // Setup cards intentionally consume the next tap when their Unit tooltip is open,
-  // but battlefield taps must always reach the board interaction handler. Otherwise
-  // a synthetic hover/touch tooltip can swallow the Unit tap before Bolster/Tactic
-  // choices are rendered.
+  // but battlefield taps must always reach the board interaction handler.
   if (isGameplayActionTarget(event.target) && tooltipVisibleAtPointerDown) closeUnitTooltip();
 }
 
@@ -126,65 +123,20 @@ function removeBotLastAction(): void {
   document.querySelector<HTMLElement>('.mobile-bot-last-action')?.remove();
 }
 
-function actionLabel(source: Element): string {
-  if (source.classList.contains('bolster')) return '증원';
-  if (source.classList.contains('tactic')) return '전술';
-  if (source.classList.contains('control')) return '점령';
-  return source.textContent?.trim() || '행동';
-}
-
-function selectedActionSources(): SVGGElement[] {
-  const popover = document.querySelector<SVGGElement>('.unit-action-popover');
-  if (!popover) return [];
-  return Array.from(popover.querySelectorAll<SVGGElement>('.board-action-chip[data-board-key]'));
-}
-
-function syncUnitActionBar(): void {
-  const hud = document.querySelector<HTMLElement>('.interaction-hud');
-  const existing = document.querySelector<HTMLElement>('.context-unit-actions');
-  const sources = selectedActionSources();
-
-  if (!hud || !sources.length) {
-    existing?.remove();
-    return;
-  }
-
-  const popover = sources[0].closest<SVGGElement>('.unit-action-popover');
-  const unitId = popover?.dataset.actionFor ?? '';
-  const signature = `${unitId}:${sources.map((source) => source.dataset.boardKey ?? '').join('|')}`;
-  if (existing?.dataset.signature === signature && existing.parentElement === hud) return;
-  existing?.remove();
-
-  const bar = document.createElement('div');
-  bar.className = 'context-unit-actions';
-  bar.setAttribute(GENERATED_ATTR, 'true');
-  bar.dataset.signature = signature;
-  bar.setAttribute('role', 'group');
-  bar.setAttribute('aria-label', '선택한 유닛 행동');
-
-  const label = document.createElement('span');
-  label.className = 'context-unit-actions-label';
-  label.textContent = '선택 유닛';
-  bar.append(label);
-
-  for (const source of sources) {
-    const key = source.dataset.boardKey;
-    if (!key) continue;
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = `context-unit-action ${source.classList.contains('bolster') ? 'bolster' : source.classList.contains('tactic') ? 'tactic' : source.classList.contains('control') ? 'control' : ''}`;
-    button.dataset.proxyBoardKey = key;
-    button.textContent = actionLabel(source);
-    bar.append(button);
-  }
-
-  hud.append(bar);
+function localizeBoardActionChips(): void {
+  document.querySelectorAll<SVGGElement>('.unit-action-popover .board-action-chip').forEach((chip) => {
+    const label = chip.querySelector<SVGTextElement>('text');
+    if (!label) return;
+    if (chip.classList.contains('bolster')) label.textContent = '증원';
+    else if (chip.classList.contains('tactic')) label.textContent = '전술';
+    else if (chip.classList.contains('control')) label.textContent = '점령';
+  });
 }
 
 function syncResponsiveUi(): void {
   syncQueued = false;
   captureBotActionToast();
-  syncUnitActionBar();
+  localizeBoardActionChips();
 
   if (isMobileUi()) syncBotLastAction();
   else removeBotLastAction();
@@ -196,25 +148,10 @@ function queueSync(): void {
   requestAnimationFrame(syncResponsiveUi);
 }
 
-function onGeneratedActionClick(event: MouseEvent): void {
-  const target = event.target as HTMLElement | null;
-  const button = target?.closest<HTMLButtonElement>('[data-proxy-board-key]');
-  if (!button) return;
-
-  const key = button.dataset.proxyBoardKey;
-  if (!key) return;
-  const source = selectedActionSources().find((candidate) => candidate.dataset.boardKey === key);
-  if (!source) return;
-
-  event.preventDefault();
-  source.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
-}
-
 function startResponsiveUi(): void {
   document.addEventListener('mouseenter', onMouseEnterCapture, true);
   document.addEventListener('pointerdown', onPointerDownCapture, true);
   document.addEventListener('click', onClickCapture, true);
-  document.addEventListener('click', onGeneratedActionClick);
 
   const observer = new MutationObserver(queueSync);
   observer.observe(document.body, { childList: true, subtree: true });
