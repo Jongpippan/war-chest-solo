@@ -20,6 +20,7 @@ let botBusy = false;
 let undoStack = [];
 let lastBotThought = null;
 let botThoughtHistory = [];
+let utilityPanel = null;
 function esc(value) {
     return value.replace(/[&<>'"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[ch]));
 }
@@ -623,7 +624,59 @@ function renderSetup() {
 function playerName(id) {
     return id === 'human' ? '당신' : '봇';
 }
-function unitCardMini(type, owner) {
+function coinBackSvg() {
+    return `<svg viewBox="0 0 24 24" class="coin-back-icon" aria-hidden="true">
+    <circle cx="12" cy="12" r="8.3" fill="none" stroke="currentColor" stroke-width="1.8"/>
+    <path d="M9 11V8.9a3 3 0 0 1 6 0V11" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+    <rect x="7.8" y="10.5" width="8.4" height="6.6" rx="1.8" fill="currentColor" opacity=".22"/>
+    <path d="M12 13v2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+  </svg>`;
+}
+function tableCoin(coin, options = {}) {
+    const faceUp = options.faceUp ?? true;
+    const cls = options.className ?? '';
+    const interactive = options.owner === 'human' && options.index !== undefined;
+    const tag = interactive ? 'button' : 'span';
+    const attrs = interactive ? ` type="button" data-hand-index="${options.index}"` : '';
+    if (!faceUp || !coin) {
+        return `<${tag}${attrs} class="table-coin back ${cls}" aria-label="뒷면 코인"><span class="table-coin-inner">${coinBackSvg()}</span></${tag}>`;
+    }
+    const info = infoForCoin(coin);
+    const unitAttr = ` data-unit-type="${coin}"`;
+    return `<${tag}${attrs}${unitAttr} class="table-coin front ${cls}" style="--coin-accent:${info.accent}" aria-label="${esc(coinLabel(coin))}"><span class="table-coin-inner">${unitIconSvg(coin)}</span></${tag}>`;
+}
+function renderControlMarkers(id) {
+    if (!state)
+        return '';
+    const controlled = 6 - state.players[id].markersRemaining;
+    return `<div class="marker-track" aria-label="${playerName(id)} control markers">${Array.from({ length: 6 }, (_, i) => `<span class="control-marker ${i < controlled ? 'placed' : 'available'} ${id}">${i < controlled ? '◆' : ''}</span>`).join('')}</div>`;
+}
+function renderHandZone(id) {
+    if (!state)
+        return '';
+    const p = state.players[id];
+    const coins = p.hand.map((coin, index) => id === 'human'
+        ? tableCoin(coin, { owner: 'human', index, className: index === selectedCoinIndex ? 'selected' : '' })
+        : tableCoin(null, { faceUp: false }));
+    return `<div class="resource-zone hand-zone"><div class="resource-label"><span>HAND</span><b>${p.hand.length}</b></div><div class="coin-fan">${coins.join('') || '<span class="empty-zone">비어 있음</span>'}</div></div>`;
+}
+function renderBagZone(id) {
+    if (!state)
+        return '';
+    const count = state.players[id].bag.length;
+    return `<div class="resource-zone bag-zone"><div class="resource-label"><span>BAG</span><b>${count}</b></div><div class="bag-visual" aria-label="Bag ${count} coins"><svg viewBox="0 0 44 50" aria-hidden="true"><path d="M12 9c5 3 15 3 20 0l-3.2 7.2C36 21 39 29 37.2 37.5 35.6 45 29 47 22 47S8.4 45 6.8 37.5C5 29 8 21 15.2 16.2L12 9Z"/><path d="M13 8c4.5-3 13.5-3 18 0"/></svg><span class="bag-count">${count}</span><span class="peeking-coin one">${coinBackSvg()}</span><span class="peeking-coin two">${coinBackSvg()}</span></div></div>`;
+}
+function renderDiscardZone(id) {
+    if (!state)
+        return '';
+    const p = state.players[id];
+    const visible = p.discard.slice(-6);
+    const coins = visible.map((d) => tableCoin(d.faceUp ? d.coin : null, { faceUp: d.faceUp, className: 'discard-coin' })).join('');
+    const up = p.discard.filter((d) => d.faceUp).length;
+    const down = p.discard.length - up;
+    return `<div class="resource-zone discard-zone"><div class="resource-label"><span>DISCARD</span><b>${p.discard.length}</b></div><div class="discard-stack">${coins || '<span class="empty-zone">비어 있음</span>'}${p.discard.length > 6 ? `<span class="more-count">+${p.discard.length - 6}</span>` : ''}</div><div class="discard-legend"><span>앞 ${up}</span><span>뒤 ${down}</span></div></div>`;
+}
+function renderSupplyCard(type, owner) {
     if (!state)
         return '';
     const d = UNIT_DEFS[type];
@@ -631,52 +684,27 @@ function unitCardMini(type, owner) {
     const supply = p.supply[type] ?? 0;
     const boardStrength = state.boardUnits.filter((u) => u.owner === owner && u.type === type).reduce((n, u) => n + u.strength, 0);
     const removed = p.removed.filter((c) => c === type).length;
-    return `<article class="mini-card" style="--accent:${d.accent}" data-unit-type="${type}" data-owner-label="${owner === 'human' ? '내 유닛' : '봇 유닛'}" data-supply="${supply}" data-board="${boardStrength}" data-removed="${removed}">
-    <div class="mini-icon">${unitIconSvg(type)}</div>
-    <div class="mini-copy"><strong>${esc(d.ko)}</strong><span>${esc(d.name)}</span></div>
-    <div class="mini-stats"><span>S ${supply}</span><span>B ${boardStrength}</span><span>O ${removed}</span></div>
+    const stackCoins = Array.from({ length: Math.min(supply, 4) }, (_, i) => `<span class="supply-mini-coin" style="--i:${i};--coin-accent:${d.accent}">${unitIconSvg(type)}</span>`).join('');
+    return `<article class="supply-card" style="--accent:${d.accent}" data-unit-type="${type}" data-owner-label="${owner === 'human' ? '내 유닛' : '봇 유닛'}" data-supply="${supply}" data-board="${boardStrength}" data-removed="${removed}">
+    <div class="supply-card-head"><span class="supply-icon">${unitIconSvg(type)}</span><span class="supply-name"><strong>${esc(d.ko)}</strong><small>${esc(d.name)}</small></span><b class="supply-total">×${d.coinCount}</b></div>
+    <div class="supply-card-foot"><div class="supply-stack" aria-label="Supply ${supply}">${stackCoins || '<span class="supply-empty">0</span>'}</div><div class="supply-stats"><span>공급 <b>${supply}</b></span><span>보드 <b>${boardStrength}</b></span><span>제거 <b>${removed}</b></span></div></div>
   </article>`;
-}
-function bagSummary(id) {
-    if (!state)
-        return '';
-    const p = state.players[id];
-    if (id === 'bot')
-        return `${p.bag.length}개`;
-    const counts = new Map();
-    for (const coin of p.bag)
-        counts.set(coin, (counts.get(coin) ?? 0) + 1);
-    const detail = [...counts.entries()].map(([coin, count]) => `${coin === 'ROYAL' ? 'Royal' : UNIT_DEFS[coin].ko}×${count}`).join(', ');
-    return `${p.bag.length}개${detail ? ` · ${detail}` : ''}`;
-}
-function discardSummary(id) {
-    if (!state)
-        return '';
-    const p = state.players[id];
-    const up = p.discard.filter((d) => d.faceUp).map((d) => coinLabel(d.coin));
-    if (id === 'human') {
-        const down = p.discard.filter((d) => !d.faceUp).map((d) => coinLabel(d.coin));
-        return `앞면 ${up.length}${up.length ? ` (${up.join(', ')})` : ''} · 뒷면 ${down.length}${down.length ? ` (${down.join(', ')})` : ''}`;
-    }
-    return `앞면 ${up.length}${up.length ? ` (${up.join(', ')})` : ''} · 뒷면 ${p.discard.filter((d) => !d.faceUp).length}`;
 }
 function renderPlayerPanel(id) {
     if (!state)
         return '';
     const p = state.players[id];
     const controlled = 6 - p.markersRemaining;
-    const initiative = state.initiative === id ? '<span class="initiative-badge">Initiative</span>' : '';
-    const hand = id === 'human' ? (p.hand.map((c) => coinLabel(c)).join(', ') || '없음') : `${p.hand.length}개 비공개`;
-    return `<section class="player-panel ${id}">
-    <div class="player-heading">
-      <div>
-        <div class="eyebrow">${id === 'human' ? 'PLAYER' : `BOT · ${difficultyLabel(difficulty).toUpperCase()}`}</div>
-        <h2>${playerName(id)} ${initiative}</h2>
-      </div>
-      <div class="control-score"><strong>${controlled}</strong><span>/ 6</span></div>
+    const initiative = state.initiative === id ? '<span class="initiative-badge">INITIATIVE</span>' : '';
+    return `<section class="player-panel tabletop-player ${id}">
+    <div class="player-heading tabletop-heading">
+      <div><div class="eyebrow">${id === 'human' ? 'YOUR TABLE' : `BOT · ${difficultyLabel(difficulty).toUpperCase()}`}</div><h2>${playerName(id)} ${initiative}</h2></div>
+      <div class="control-score"><strong>${controlled}</strong><span>/ 6 거점</span></div>
     </div>
-    <div class="resource-strip compact"><span><b>Hand</b>${esc(hand)}</span><span><b>Bag</b>${esc(bagSummary(id))}</span><span><b>Discard</b>${esc(discardSummary(id))}</span></div>
-    <div class="mini-card-row compact-grid">${p.units.map((u) => unitCardMini(u, id)).join('')}</div>
+    ${renderControlMarkers(id)}
+    <div class="resource-table">${renderHandZone(id)}${renderBagZone(id)}${renderDiscardZone(id)}</div>
+    <div class="supply-heading"><span>UNIT SUPPLY</span><small>카드 Hover로 능력 확인</small></div>
+    <div class="supply-grid">${p.units.map((u) => renderSupplyCard(u, id)).join('')}</div>
   </section>`;
 }
 function axialToPixel(id) {
@@ -803,7 +831,7 @@ function renderActionPanel(actions = []) {
         return `<div class="result-card ${win ? 'win' : 'lose'}"><div class="eyebrow">GAME OVER</div><h2>${win ? '승리!' : '패배'}</h2><p>${win ? 'Control Marker 6개를 모두 배치했습니다.' : '봇이 먼저 6개 Location을 장악했습니다.'}</p><button id="againBtn" class="primary">새 게임</button></div>`;
     }
     if (state.activePlayer === 'bot') {
-        return `<div class="thinking-card"><div class="bot-pulse"></div><div><strong>${difficultyLabel(difficulty)} 봇이 계산 중...</strong><p>${difficulty === 'HARD' ? '후보 수를 가상 적용해 후속 보드까지 비교합니다.' : '현재 합법 행동 중 최선의 수를 고르는 중입니다.'}</p></div></div>`;
+        return `<div class="thinking-card"><div class="bot-pulse"></div><div><strong>${difficultyLabel(difficulty)} 봇이 계산 중...</strong><p>오른쪽 플레이어 영역의 공개 정보는 계속 확인할 수 있습니다.</p></div></div>`;
     }
     const grouped = new Map();
     for (const action of actions) {
@@ -816,12 +844,16 @@ function renderActionPanel(actions = []) {
       <summary>${esc(group)} <span>${items.length}</span></summary>
       <div class="action-buttons">${items.map((a) => `<button class="action-btn" data-action-id="${a.id}">${esc(a.label)}</button>`).join('')}</div>
     </details>`).join('');
+    const selected = state.forcedCoin?.player === 'human'
+        ? state.forcedCoin.coin
+        : state.players.human.hand[selectedCoinIndex];
+    const selectedInfo = selected ? infoForCoin(selected) : null;
     const context = state.pending
         ? '특수 능력의 후속 행동을 선택하세요.'
         : state.forcedCoin
             ? '전투 사제가 뽑은 코인을 즉시 사용하세요.'
-            : '손의 코인을 고르면 가능한 수만 표시됩니다. 버튼 Hover 시 관련 칸이 강조됩니다.';
-    return `<div class="action-header"><div class="eyebrow">YOUR TURN · ROUND ${state.round}</div><h2>행동 선택</h2><p>${esc(context)}</p></div>${!state.pending ? `<div class="hand-row">${coinButtons()}</div>` : '<div class="ability-banner">특수 능력 해결 중</div>'}<div class="action-scroll">${groupsHtml || '<p class="muted">가능한 행동이 없습니다.</p>'}</div>`;
+            : '왼쪽 HAND의 동전을 선택하면 가능한 행동만 표시됩니다.';
+    return `<div class="action-header"><div class="eyebrow">YOUR TURN · ROUND ${state.round}</div><h2>행동 선택</h2><p>${esc(context)}</p></div>${selected && selectedInfo ? `<div class="selected-action-coin" style="--coin-accent:${selectedInfo.accent}" data-unit-type="${selected}"><span class="table-coin front static"><span class="table-coin-inner">${unitIconSvg(selected)}</span></span><div><small>선택한 코인</small><strong>${esc(coinLabel(selected))}</strong></div></div>` : ''}<div class="action-scroll">${groupsHtml || '<p class="muted">가능한 행동이 없습니다.</p>'}</div>`;
 }
 function boardStrength(id) {
     return state?.boardUnits.filter((u) => u.owner === id).reduce((n, u) => n + u.strength, 0) ?? 0;
@@ -865,7 +897,13 @@ function renderStatusBar() {
         return '';
     const active = state.activePlayer === 'human' ? '당신 차례' : '봇 차례';
     const initiative = state.initiative === 'human' ? '당신' : '봇';
-    return `<div class="status-bar"><span><b>Round ${state.round}</b></span><span class="turn-pill ${state.activePlayer}">${active}</span><span>Initiative <b>${initiative}</b></span><span class="difficulty-chip">BOT ${difficultyLabel(difficulty)}</span></div>`;
+    return `<div class="status-bar"><span><b>Round ${state.round}</b></span><span class="turn-pill ${state.activePlayer}">${active}</span><span>Initiative <b>${initiative}</b></span><span class="difficulty-chip">BOT ${difficultyLabel(difficulty)}</span><div class="utility-toolbar"><button type="button" class="utility-toggle ${utilityPanel === 'analysis' ? 'active' : ''}" data-utility="analysis">◎ 분석</button><button type="button" class="utility-toggle ${utilityPanel === 'bot' ? 'active' : ''}" data-utility="bot">◇ 봇 설명</button><button type="button" class="utility-toggle ${utilityPanel === 'log' ? 'active' : ''}" data-utility="log">≡ 로그</button></div></div>`;
+}
+function renderUtilityDrawer() {
+    if (!utilityPanel)
+        return '';
+    const content = utilityPanel === 'analysis' ? renderAnalysis() : utilityPanel === 'bot' ? renderBotThought() : renderLog();
+    return `<aside class="utility-drawer"><button type="button" class="utility-close" id="utilityClose" aria-label="닫기">×</button>${content}</aside>`;
 }
 function undoLastHumanTurn() {
     if (botBusy || undoStack.length === 0)
@@ -887,29 +925,16 @@ function renderGame() {
     const actions = state.activePlayer === 'human' && !state.winner ? humanCandidates() : [];
     const sanity = stateSanity(state);
     app.innerHTML = `<main class="game-shell">
-    <header class="topbar compact"><div><div class="eyebrow">LOCAL SOLO · REDESIGNED</div><h1>War Chest Solo</h1></div><div class="topbar-actions"><button id="undoBtn" class="ghost" ${undoStack.length && !botBusy ? '' : 'disabled'}>↶ Undo</button><button id="rulesBtn" class="ghost">룰 메모</button><button id="restartBtn" class="ghost danger">처음부터</button></div></header>
+    <header class="topbar compact"><div><div class="eyebrow">LOCAL SOLO · TABLE VIEW</div><h1>War Chest Solo</h1></div><div class="topbar-actions"><button id="undoBtn" class="ghost" ${undoStack.length && !botBusy ? '' : 'disabled'}>↶ Undo</button><button id="rulesBtn" class="ghost">룰 메모</button><button id="restartBtn" class="ghost danger">처음부터</button></div></header>
     ${renderStatusBar()}
     ${sanity.length ? `<div class="debug-warning">상태 검사 경고: ${esc(sanity.join(' / '))}</div>` : ''}
     <section class="workspace-grid">
-      <aside class="left-rail">
-        ${renderPlayerPanel('bot')}
-        ${renderPlayerPanel('human')}
-        ${renderAnalysis()}
-      </aside>
-      <section class="board-stage">
-        <div class="board-panel">
-          <div class="board-title"><div><div class="eyebrow">BATTLEFIELD</div><h2>2인전 보드 레이아웃</h2></div><div class="board-legend"><span><i class="legend-dot human"></i>당신</span><span><i class="legend-dot bot"></i>봇</span><span><i class="legend-location"></i>Location</span></div></div>
-          <div id="boardHost">${renderBoardSvg()}</div>
-          <div class="board-footnote">공식 보드 실루엣을 참고해 재구성했습니다. 중앙 전장과 측면 2인 미사용 구역을 시각적으로 분리했습니다.</div>
-        </div>
-      </section>
-      <aside class="right-rail">
-        <section class="action-panel">${renderActionPanel(actions)}</section>
-        ${renderBotThought()}
-        ${renderLog()}
-      </aside>
+      <aside class="left-rail player-rail">${renderPlayerPanel('human')}</aside>
+      <section class="board-stage"><div class="board-panel"><div class="board-title"><div><div class="eyebrow">BATTLEFIELD</div><h2>중앙 전장</h2></div><div class="board-legend"><span><i class="legend-dot human"></i>당신</span><span><i class="legend-dot bot"></i>봇</span><span><i class="legend-location"></i>Location</span></div></div><div id="boardHost">${renderBoardSvg()}</div></div></section>
+      <aside class="right-rail"><div class="bot-table-wrap">${renderPlayerPanel('bot')}</div><section class="action-panel">${renderActionPanel(actions)}</section></aside>
     </section>
-    <dialog id="rulesDialog" class="rules-dialog"><form method="dialog"><button class="dialog-close">×</button></form><div class="eyebrow">QUICK RULES</div><h2>빠른 룰 메모</h2><p>한 라운드에 각자 코인 3개를 뽑고 Initiative 보유자부터 번갈아 1개씩 사용합니다.</p><ul><li><b>배치/강화:</b> 유닛 코인을 보드에 직접 놓습니다.</li><li><b>뒷면:</b> Initiative, Recruit, Pass.</li><li><b>앞면:</b> Move, Attack, Control, Tactic.</li><li><b>승리:</b> Control Marker 6개를 모두 보드에 놓으면 즉시 승리합니다.</li><li><b>공격:</b> 맞은 스택에서 코인 1개를 게임에서 제거합니다.</li></ul><p class="muted">Undo는 직전 당신의 주 행동 직전으로 돌아가며, 그 뒤 봇 응수까지 함께 취소합니다.</p></dialog>
+    ${renderUtilityDrawer()}
+    <dialog id="rulesDialog" class="rules-dialog"><form method="dialog"><button class="dialog-close">×</button></form><div class="eyebrow">QUICK RULES</div><h2>빠른 룰 메모</h2><p>한 라운드에 각자 코인 3개를 뽑고 Initiative 보유자부터 번갈아 1개씩 사용합니다.</p><ul><li><b>배치/강화:</b> 유닛 코인을 보드에 직접 놓습니다.</li><li><b>뒷면:</b> Initiative, Recruit, Pass.</li><li><b>앞면:</b> Move, Attack, Control, Tactic.</li><li><b>승리:</b> Control Marker 6개를 모두 보드에 놓으면 즉시 승리합니다.</li><li><b>공격:</b> 맞은 스택에서 코인 1개를 게임에서 제거합니다.</li></ul></dialog>
     <div id="unitTooltip" class="unit-tooltip" hidden></div>
   </main>`;
     document.querySelector('#restartBtn')?.addEventListener('click', () => { if (confirm('현재 게임을 버리고 새로 시작할까요?'))
@@ -917,7 +942,13 @@ function renderGame() {
     document.querySelector('#againBtn')?.addEventListener('click', newGameSetup);
     document.querySelector('#undoBtn')?.addEventListener('click', undoLastHumanTurn);
     document.querySelector('#rulesBtn')?.addEventListener('click', () => document.querySelector('#rulesDialog')?.showModal());
-    document.querySelectorAll('.coin-button').forEach((btn) => btn.addEventListener('click', () => { selectedCoinIndex = Number(btn.dataset.coinIndex ?? 0); previewHexes.clear(); renderGame(); }));
+    document.querySelectorAll('[data-hand-index]').forEach((btn) => btn.addEventListener('click', () => { selectedCoinIndex = Number(btn.dataset.handIndex ?? 0); previewHexes.clear(); renderGame(); }));
+    document.querySelectorAll('.utility-toggle').forEach((btn) => btn.addEventListener('click', () => {
+        const next = btn.dataset.utility;
+        utilityPanel = utilityPanel === next ? null : next;
+        renderGame();
+    }));
+    document.querySelector('#utilityClose')?.addEventListener('click', () => { utilityPanel = null; renderGame(); });
     const actionMap = new Map(actions.map((a) => [a.id, a]));
     document.querySelectorAll('.action-btn').forEach((btn) => {
         const action = actionMap.get(btn.dataset.actionId ?? '');
