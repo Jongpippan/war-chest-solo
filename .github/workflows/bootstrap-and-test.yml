@@ -16,24 +16,23 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Restore staged v0.3 redesign
-        if: ${{ hashFiles('.v03/main.ts.gz.b64') != '' }}
+      - name: Apply staged v0.4 UI patch
+        if: ${{ hashFiles('.v04/ui.patch.gz.b64') != '' }}
         run: |
-          base64 -d .v03/main.ts.gz.b64 | gunzip > src/main.ts
-          base64 -d .v03/styles.css.gz.b64 | gunzip > styles.css
-          base64 -d .v03/README.md.gz.b64 | gunzip > README.md
+          base64 -d .v04/ui.patch.gz.b64 | gunzip > /tmp/v04.patch
+          git apply /tmp/v04.patch
       - name: Install dependencies
         run: npm install --no-package-lock
       - name: Run tests
         run: npm test
       - name: Run bot simulation
         run: node test/simulate.mjs
-      - name: Commit v0.3 source and build output
-        if: ${{ hashFiles('.v03/main.ts.gz.b64') != '' }}
+      - name: Commit v0.4 source and build output
+        if: ${{ hashFiles('.v04/ui.patch.gz.b64') != '' }}
         run: |
-          rm -rf .v03
+          rm -rf .v04
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
-          git commit -m 'feat: redesign battlefield and unit UI v0.3'
+          git commit -m 'feat: card-style unit hover and setup CTA fixes v0.4'
           git push
