@@ -2154,3 +2154,74 @@ button, .game-term, .round-chip, .turn-chip, .difficulty-chip, .rule-kind,
   pointer-events: all;
   cursor: pointer !important;
 }
+
+
+/* v0.11 interaction clarity + board layering */
+.context-board-actions {
+  margin-top: 5px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+.context-unit-label {
+  margin-right: 2px;
+  font-size: 8px;
+  font-weight: 950;
+  letter-spacing: .08em;
+  color: #cdb88f;
+  white-space: nowrap;
+}
+.context-board-action {
+  border: 1px solid rgba(255,244,217,.3);
+  border-radius: 999px;
+  padding: 4px 8px;
+  background: #322b21;
+  font-size: 9px;
+  font-weight: 900;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 2px 5px rgba(0,0,0,.16);
+}
+.context-board-action.bolster { background: #365d33; }
+.context-board-action.tactic { background: #5c3f73; }
+.context-board-action.control { background: #7b5b1d; }
+.context-board-action:hover { filter: brightness(1.14); transform: translateY(-1px); }
+.context-board-action .game-term { color: #fff7df !important; }
+
+/* Unit actions are no longer painted over neighboring Units. */
+.action-chip-layer, .board-action-chip { display: none !important; }
+
+/* Movement destinations, including Light Cavalry Tactic destinations. */
+.hex-cell.move-target > polygon {
+  stroke: #f1ca58 !important;
+  stroke-width: 4 !important;
+  filter: drop-shadow(0 0 8px rgba(241,202,88,.58));
+  cursor: pointer !important;
+}
+
+/* Rendering order is now: board -> Units -> Location outline -> stack badge. */
+.unit-layer { pointer-events: none; }
+.unit-layer .unit-token[data-board-key] { pointer-events: all; }
+.location-overlay-layer,
+.stack-badge-layer { pointer-events: none; }
+.location-control-outline.controlled-human {
+  filter: drop-shadow(0 0 5px rgba(35,123,131,.68));
+}
+.location-control-outline.controlled-bot {
+  filter: drop-shadow(0 0 5px rgba(173,77,88,.62));
+}
+.location-control-outline.neutral {
+  filter: drop-shadow(0 0 4px rgba(127,159,86,.46));
+}
+.stack-badge-layer .stack-badge circle {
+  filter: drop-shadow(0 2px 3px rgba(0,0,0,.32));
+}
+.stack-badge-layer .stack-count {
+  fill: #302619;
+  font-size: 12px;
+  font-weight: 950;
+}
+
+/* v0.11 pointer correction: Units keep hover/tooltips while only action targets are clickable. */
+.unit-layer { pointer-events: auto !important; }

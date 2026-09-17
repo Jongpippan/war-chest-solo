@@ -852,10 +852,7 @@ function actionInteractionPaths(action: ActionCandidate): string[][] {
     case 'TACTIC_CAVALRY':
     case 'TACTIC_LANCER': return unit && dest && target ? [[unit, 'special:TACTIC', dest, target]] : [];
     case 'TACTIC_ENSIGN': return unit && granted && dest ? [[unit, 'special:TACTIC', granted, dest]] : [];
-    case 'TACTIC_LIGHT_CAVALRY': {
-      const intermediate = action.payload.intermediate ? `hex:${action.payload.intermediate}` : null;
-      return unit && intermediate && dest ? [[unit, 'special:TACTIC', intermediate, dest]] : [];
-    }
+    case 'TACTIC_LIGHT_CAVALRY': return unit && dest ? [[unit, 'special:TACTIC', dest]] : [];
     case 'TACTIC_ROYAL_GUARD': return unit && dest ? [[unit, 'special:TACTIC', dest]] : [];
     case 'TACTIC_MARSHALL': return unit && granted && target ? [[unit, 'special:TACTIC', granted, target]] : [];
     case 'TACTIC_FOOTMAN': {
@@ -898,9 +895,11 @@ function boardInteractionState(actions: ActionCandidate[]): {
 
 function boardTargetClass(key: string, ui: ReturnType<typeof boardInteractionState>): string {
   const kinds = ui.kindsByKey.get(key) ?? new Set<string>();
-  const attack = [...kinds].some((kind) => kind.includes('ATTACK') || kind.includes('ARCHER') || kind.includes('CROSSBOWMAN') || kind.includes('LANCER') || kind.includes('CAVALRY') || kind.includes('MARSHALL'));
+  const attackKinds = new Set(['ATTACK', 'FREE_ATTACK', 'TACTIC_ARCHER', 'TACTIC_CROSSBOWMAN', 'TACTIC_MARSHALL']);
+  const attack = [...kinds].some((kind) => attackKinds.has(kind) || ((kind === 'TACTIC_CAVALRY' || kind === 'TACTIC_LANCER') && key.startsWith('unit:')));
   const deploy = kinds.has('DEPLOY');
-  return `${ui.nextKeys.has(key) ? 'actionable interaction-target' : ''} ${ui.selectedKeys.has(key) ? 'interaction-selected' : ''} ${attack ? 'attack-target' : ''} ${deploy ? 'deploy-target' : ''}`;
+  const move = key.startsWith('hex:') && [...kinds].some((kind) => kind === 'MOVE' || kind === 'FREE_MOVE' || kind === 'TACTIC_LIGHT_CAVALRY' || kind === 'TACTIC_CAVALRY' || kind === 'TACTIC_LANCER' || kind === 'TACTIC_ENSIGN' || kind === 'TACTIC_ROYAL_GUARD');
+  return `${ui.nextKeys.has(key) ? 'actionable interaction-target' : ''} ${ui.selectedKeys.has(key) ? 'interaction-selected' : ''} ${attack ? 'attack-target' : ''} ${deploy ? 'deploy-target' : ''} ${move ? 'move-target' : ''}`;
 }
 
 function executeHumanAction(action: ActionCandidate): void {
@@ -948,6 +947,22 @@ function handleBoardKey(key: string, actions: ActionCandidate[]): void {
   renderGame();
 }
 
+function renderContextBoardActions(actions: ActionCandidate[]): string {
+  if (!state || boardPath.length !== 1 || !boardPath[0].startsWith('unit:')) return '';
+  const unitId = boardPath[0].slice(5);
+  const unit = state.boardUnits.find((candidate) => candidate.id === unitId);
+  if (!unit || unit.owner !== 'human') return '';
+  const ui = boardInteractionState(actions);
+  const choices = [
+    ['special:BOLSTER', 'Bolster', 'bolster'],
+    ['special:TACTIC', 'Tactic', 'tactic'],
+    ['special:CONTROL', 'Control', 'control'],
+  ] as const;
+  const available = choices.filter(([key]) => ui.nextKeys.has(key));
+  if (!available.length) return '';
+  return `<div class="context-board-actions"><span class="context-unit-label">${esc(UNIT_DEFS[unit.type].name)} ACTIONS</span>${available.map(([key, label, cls]) => `<button type="button" class="context-board-action ${cls}" data-board-key="${key}">${gameTerm(label)}</button>`).join('')}</div>`;
+}
+
 function renderInteractionHud(actions: ActionCandidate[]): string {
   if (!state) return '';
   if (state.winner) return `<div class="interaction-hud game-over-hud">GAME OVER</div>`;
@@ -960,7 +975,7 @@ function renderInteractionHud(actions: ActionCandidate[]): string {
     : 'Select a Coin, then use highlighted Units, Locations and hexes directly.';
   return `<div class="interaction-hud compact-hud">
     <div class="selected-coin-hud">${coin && info ? `<span class="table-coin front static" style="--coin-accent:${info.accent}" data-unit-type="${coin}"><span class="table-coin-inner">${unitIconSvg(coin)}</span></span><div><small>SELECTED COIN</small><strong>${esc(coinLabel(coin))}</strong></div>` : '<div><small>SELECTED COIN</small><strong>NONE</strong></div>'}</div>
-    <div class="interaction-copy"><strong>Battlefield input</strong><span>${stepCopy}</span><div class="interaction-legend">${gameTerm('Deploy')} · ${gameTerm('Maneuver')} · ${gameTerm('Bolster')} · ${gameTerm('Tactic')} · ${gameTerm('Control')}</div></div>
+    <div class="interaction-copy"><strong>Battlefield input</strong><span>${stepCopy}</span><div class="interaction-legend">${gameTerm('Deploy')} · ${gameTerm('Maneuver')} · ${gameTerm('Bolster')} · ${gameTerm('Tactic')} · ${gameTerm('Control')}</div>${renderContextBoardActions(actions)}</div>
     <div class="face-down-guide"><span>Supply → ${gameTerm('Recruit')}</span><span>Initiative → ${gameTerm('Claim Initiative')}</span><span>Discard → ${gameTerm('Pass')}</span></div>
     <div class="interaction-hud-actions">${boardPath.length ? '<button type="button" id="cancelBoardPath" class="micro-action">Cancel</button>' : ''}${skip ? '<button type="button" id="skipAbilityBtn" class="micro-action">Skip Ability</button>' : ''}</div>
   </div>`;
@@ -998,12 +1013,15 @@ function fourPlayerWing(side: 'left' | 'right'): string {
 function renderBoardSvg(actions: ActionCandidate[] = []): string {
   if (!state) return '';
   const ui = boardInteractionState(actions);
-  const actionChips: string[] = [];
+  const unitLayer: string[] = [];
+  const locationOverlayLayer: string[] = [];
+  const stackBadgeLayer: string[] = [];
+
   const hexes = BOARD_HEXES.map((id) => {
     const { x, y } = axialToPixel(id);
     const isLocation = ALL_LOCATIONS.includes(id);
     const controller = state!.locations[id];
-    const unit = state!.boardUnits.find((u) => u.hex === id);
+    const unit = state!.boardUnits.find((candidate) => candidate.hex === id);
     const preview = previewHexes.has(id);
     const hexKey = `hex:${id}`;
     const hexCls = boardTargetClass(hexKey, ui);
@@ -1015,47 +1033,38 @@ function renderBoardSvg(actions: ActionCandidate[] = []): string {
         : isLocation
           ? '#ead9a9'
           : '#e9d8b3';
-    const locationColor = controller === 'human' ? '#277c80' : controller === 'bot' ? '#a34c58' : '#b68a2a';
-    const locationTone = controller === 'human' ? '#236f78' : controller === 'bot' ? '#9d434f' : '#86a55f';
+    const locationTone = controller === 'human' ? '#237b83' : controller === 'bot' ? '#ad4d58' : '#7f9f56';
     const locationMark = isLocation
       ? `<g class="location-emblem ${controller ? 'controlled' : 'neutral'} ${controller ?? ''}">
-          <circle cx="${x}" cy="${y}" r="25" fill="rgba(255,252,239,.92)" stroke="${locationTone}" stroke-width="4.5"/>
-          <circle cx="${x}" cy="${y}" r="18" fill="${locationTone}" opacity="${controller ? '.22' : '.13'}"/>
-          <path d="M ${x-10} ${y} C ${x-6} ${y-9}, ${x+6} ${y-9}, ${x+10} ${y} C ${x+6} ${y+9}, ${x-6} ${y+9}, ${x-10} ${y} Z" fill="none" stroke="${locationTone}" stroke-width="2.4"/>
-          ${controller ? `<circle cx="${x}" cy="${y}" r="6.5" fill="${locationTone}"/><circle cx="${x}" cy="${y}" r="2.2" fill="#fff8e8"/>` : ''}
+          <circle cx="${x}" cy="${y}" r="24" fill="rgba(255,252,239,.92)" stroke="${locationTone}" stroke-width="3.5"/>
+          <circle cx="${x}" cy="${y}" r="17" fill="${locationTone}" opacity="${controller ? '.22' : '.13'}"/>
+          <path d="M ${x-10} ${y} C ${x-6} ${y-9}, ${x+6} ${y-9}, ${x+10} ${y} C ${x+6} ${y+9}, ${x-6} ${y+9}, ${x-10} ${y} Z" fill="none" stroke="${locationTone}" stroke-width="2.2"/>
+          ${controller ? `<circle cx="${x}" cy="${y}" r="6" fill="${locationTone}"/><circle cx="${x}" cy="${y}" r="2" fill="#fff8e8"/>` : ''}
         </g>`
       : '';
 
-    let unitMark = '';
+    if (isLocation) {
+      locationOverlayLayer.push(`<polygon class="location-control-outline ${controller ? `controlled-${controller}` : 'neutral'}" data-location-overlay="${id}" points="${hexPoints(x, y, 33.2)}" fill="none" stroke="${locationTone}" stroke-width="${controller ? 6.2 : 3.6}" stroke-linejoin="round" opacity="${controller ? '.96' : '.78'}" pointer-events="none"/>`);
+    }
+
     if (unit) {
       const d = UNIT_DEFS[unit.type];
       const ownerFill = unit.owner === 'human' ? '#275e67' : '#853f47';
       const unitKey = `unit:${unit.id}`;
       const unitCls = boardTargetClass(unitKey, ui);
       const unitAttr = ui.nextKeys.has(unitKey) ? ` data-board-key="${unitKey}" role="button"` : '';
-      unitMark = `<g class="token unit-token ${unitCls}"${unitAttr} data-unit-type="${unit.type}" data-owner-label="${unit.owner === 'human' ? 'Your Unit' : 'Bot Unit'}" data-stack="${unit.strength}" data-location="${coordinateLabel(id)}">
+      unitLayer.push(`<g class="token unit-token ${unitCls}"${unitAttr} data-unit-type="${unit.type}" data-owner-label="${unit.owner === 'human' ? 'Your Unit' : 'Bot Unit'}" data-stack="${unit.strength}" data-location="${coordinateLabel(id)}">
         <circle cx="${x}" cy="${y + 3}" r="34" fill="rgba(0,0,0,.2)"/>
         <circle cx="${x}" cy="${y}" r="33" fill="${ownerFill}" stroke="#f4e7c3" stroke-width="2.8"/>
         <circle cx="${x}" cy="${y}" r="27" fill="${d.accent}" stroke="rgba(255,255,255,.58)" stroke-width="1.7"/>
         ${tokenIconMarkup(unit.type, x, y, 29)}
-        ${unit.strength > 1 ? `<g class="stack-badge"><circle cx="${x + 24}" cy="${y - 23}" r="12.5" fill="#fff5db" stroke="#453722" stroke-width="1.8"/><text x="${x + 24}" y="${y - 19}" text-anchor="middle" class="stack-count">${unit.strength}</text></g>` : ''}
-      </g>`;
-      if (ui.selectedKeys.has(unitKey)) {
-        const specials = [
-          ['special:BOLSTER', 'BOLSTER', 'bolster'],
-          ['special:TACTIC', 'TACTIC', 'tactic'],
-          ['special:CONTROL', 'CONTROL', 'control'],
-        ] as const;
-        let chipIndex = 0;
-        actionChips.push(...specials.filter(([key]) => ui.nextKeys.has(key)).map(([key, label, cls]) => {
-          const by = y - 44 + chipIndex * 23;
-          chipIndex += 1;
-          return `<g class="board-action-chip ${cls}" data-board-key="${key}" role="button"><rect x="${x + 30}" y="${by - 13}" width="68" height="20" rx="10"/><text x="${x + 64}" y="${by + 1}" text-anchor="middle">${label}</text></g>`;
-        }));
+      </g>`);
+      if (unit.strength > 1) {
+        stackBadgeLayer.push(`<g class="stack-badge" data-stack-badge="${unit.id}" pointer-events="none"><circle cx="${x + 23}" cy="${y - 22}" r="12.5" fill="#fff5db" stroke="#453722" stroke-width="1.8"/><text x="${x + 23}" y="${y - 18}" text-anchor="middle" class="stack-count">${unit.strength}</text></g>`);
       }
     }
 
-    return `<g class="hex-cell ${isLocation ? 'location-hex' : ''} ${controller ? `controlled-${controller}` : ''} ${preview ? 'preview' : ''} ${hexCls}"${hexAttr}><polygon points="${hexPoints(x, y)}" fill="${fill}" stroke="${preview ? '#f4c65d' : '#b59558'}" stroke-width="${preview ? 4 : 1.6}"/>${locationMark}${unitMark}</g>`;
+    return `<g class="hex-cell ${isLocation ? 'location-hex' : ''} ${controller ? `controlled-${controller}` : ''} ${preview ? 'preview' : ''} ${hexCls}"${hexAttr}><polygon points="${hexPoints(x, y)}" fill="${fill}" stroke="${preview ? '#f4c65d' : '#b59558'}" stroke-width="${preview ? 4 : 1.6}"/>${locationMark}</g>`;
   }).join('');
 
   return `<svg class="battlefield" viewBox="54 58 852 560" role="img" aria-label="War Chest battlefield">
@@ -1075,8 +1084,10 @@ function renderBoardSvg(actions: ActionCandidate[] = []): string {
     ${fourPlayerWing('right')}
     <rect x="435" y="70" width="90" height="28" rx="8" fill="#a8a5a9" opacity=".42"/>
     <rect x="435" y="578" width="90" height="28" rx="8" fill="#a8a5a9" opacity=".42"/>
-    ${hexes}
-    <g class="action-chip-layer">${actionChips.join('')}</g>
+    <g class="hex-layer">${hexes}</g>
+    <g class="unit-layer">${unitLayer.join('')}</g>
+    <g class="location-overlay-layer">${locationOverlayLayer.join('')}</g>
+    <g class="stack-badge-layer">${stackBadgeLayer.join('')}</g>
   </svg>`;
 }
 
