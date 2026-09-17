@@ -17,10 +17,8 @@ jobs:
         with:
           node-version: 22
       - name: Apply staged v0.6 tabletop UI patch
-        if: ${{ hashFiles('.v06/apply_v06.py.gz.b64') != '' }}
-        run: |
-          base64 -d .v06/apply_v06.py.gz.b64 | gunzip > /tmp/apply_v06.py
-          python /tmp/apply_v06.py
+        if: ${{ hashFiles('.v06/apply.py') != '' }}
+        run: python .v06/apply.py
       - name: Install dependencies
         run: npm install --no-package-lock
       - name: Run tests
@@ -28,7 +26,7 @@ jobs:
       - name: Run bot simulation
         run: node test/simulate.mjs
       - name: Commit v0.6 source and build output
-        if: ${{ hashFiles('.v06/apply_v06.py.gz.b64') != '' }}
+        if: ${{ hashFiles('.v06/apply.py') != '' }}
         run: |
           rm -rf .v06
           git config user.name 'github-actions[bot]'
