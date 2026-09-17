@@ -34,8 +34,12 @@ async function assertRealUnitActions(page, viewportName) {
   const unit = page.locator('.unit-token[data-unit-type="LIGHT_CAVALRY"][data-board-key]').first();
   await unit.click();
 
-  await page.waitForSelector('.unit-action-popover');
-  await page.waitForSelector('.context-unit-actions');
+  // The SVG <g> is structural interaction data. Chromium/Playwright can report
+  // an SVG group as not "visible" even while its child chips are rendered, so
+  // only require it to be attached. The user-facing HTML action bar below is
+  // still required to be actually visible.
+  await page.waitForSelector('.unit-action-popover', { state: 'attached' });
+  await page.waitForSelector('.context-unit-actions', { state: 'visible' });
 
   const labels = await page.locator('.context-unit-action').allTextContents();
   assert.ok(labels.includes('증원'), `${viewportName}: Bolster must be surfaced for a deployed matching Unit`);
