@@ -14,8 +14,11 @@ for (const [width, height, label] of sizes) {
   const page = await browser.newPage({ viewport: { width, height } });
   await page.goto('http://127.0.0.1:4173/', { waitUntil: 'networkidle' });
   await page.click('#recommendedBtn');
+  await page.waitForSelector('#startBtn');
   await page.click('#startBtn');
-  await page.waitForTimeout(900);
+  await page.waitForSelector('.game-shell', { timeout: 5000 });
+  await page.waitForTimeout(1200);
+  await page.screenshot({ path: `.v08/screens/game-${label}.png`, fullPage: true });
 
   const report = await page.evaluate(() => {
     const rect = (sel) => {
@@ -32,14 +35,17 @@ for (const [width, height, label] of sizes) {
       innerWidth: window.innerWidth,
       innerHeight: window.innerHeight,
       boxes,
+      headerClass: document.querySelector('header')?.className ?? null,
+      bodyText: document.body.innerText.slice(0, 240),
     };
   });
 
+  console.log(label, JSON.stringify(report));
   if (report.scrollWidth > report.innerWidth + 2 || report.scrollHeight > report.innerHeight + 2) {
     throw new Error(`${label}: document overflow ${report.scrollWidth}x${report.scrollHeight} in ${report.innerWidth}x${report.innerHeight}`);
   }
   for (const [name, box] of Object.entries(report.boxes)) {
-    if (!box) throw new Error(`${label}: missing ${name}`);
+    if (!box) throw new Error(`${label}: missing ${name}; header=${report.headerClass}; body=${report.bodyText}`);
     if (box.left < -2 || box.top < -2 || box.right > width + 2 || box.bottom > height + 2) {
       throw new Error(`${label}: ${name} clipped ${JSON.stringify(box)}`);
     }
@@ -48,8 +54,6 @@ for (const [width, height, label] of sizes) {
   const left = report.boxes['.left-rail'];
   const right = report.boxes['.right-rail'];
   if (left.right > board.left + 1 || board.right > right.left + 1) throw new Error(`${label}: columns overlap`);
-
-  await page.screenshot({ path: `.v08/screens/game-${label}.png`, fullPage: true });
   await page.close();
 }
 
