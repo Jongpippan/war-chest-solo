@@ -16,42 +16,40 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Apply staged v0.11 battlefield patch
-        if: ${{ hashFiles('.v11/apply.py') != '' }}
-        run: |
-          python .v11/apply.py
-          python .v11/post.py
+      - name: Apply staged v0.12 combat and responsive patch
+        if: ${{ hashFiles('.v12/apply.py') != '' }}
+        run: python .v12/apply.py
       - name: Install dependencies
         run: npm install --no-package-lock
       - name: Run tests
         run: npm test
       - name: Run bot simulation
         run: node test/simulate.mjs
-      - name: Install Playwright for v0.11 browser regression
-        if: ${{ hashFiles('.v11/interaction.mjs') != '' }}
+      - name: Install Playwright for v0.12 browser regression
+        if: ${{ hashFiles('.v12/interaction.mjs') != '' }}
         run: |
           npm install --no-save playwright@1.55.0
           npx playwright install chromium
-      - name: Verify Light Cavalry, Bolster and Location visuals
-        if: ${{ hashFiles('.v11/interaction.mjs') != '' }}
+      - name: Verify combat identity animation and mobile layout
+        if: ${{ hashFiles('.v12/interaction.mjs') != '' }}
         run: |
           python3 -m http.server 4173 > /tmp/war-chest-http.log 2>&1 &
           SERVER_PID=$!
           trap 'kill $SERVER_PID || true' EXIT
           sleep 1
-          node .v11/interaction.mjs
-      - name: Upload v0.11 visual regression screenshots
-        if: ${{ hashFiles('.v11/screens') != '' }}
+          node .v12/interaction.mjs
+      - name: Upload v0.12 visual regression screenshots
+        if: ${{ hashFiles('.v12/screens') != '' }}
         uses: actions/upload-artifact@v4
         with:
-          name: v011-battlefield-visual-regression
-          path: .v11/screens/*.png
-      - name: Commit v0.11 source and build output
-        if: ${{ hashFiles('.v11/apply.py') != '' }}
+          name: v012-combat-responsive-regression
+          path: .v12/screens/*.png
+      - name: Commit v0.12 source and build output
+        if: ${{ hashFiles('.v12/apply.py') != '' }}
         run: |
-          rm -rf .v11
+          rm -rf .v12
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
-          git commit -m 'fix: clarify battlefield actions and token layering v0.11'
+          git commit -m 'fix: combat identity playback and mobile table v0.12'
           git push
