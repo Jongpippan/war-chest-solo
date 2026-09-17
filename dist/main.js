@@ -793,7 +793,10 @@ function actionInteractionPaths(action) {
         case 'TACTIC_CAVALRY':
         case 'TACTIC_LANCER': return unit && dest && target ? [[unit, 'special:TACTIC', dest, target]] : [];
         case 'TACTIC_ENSIGN': return unit && granted && dest ? [[unit, 'special:TACTIC', granted, dest]] : [];
-        case 'TACTIC_LIGHT_CAVALRY':
+        case 'TACTIC_LIGHT_CAVALRY': {
+            const intermediate = action.payload.intermediate ? `hex:${action.payload.intermediate}` : null;
+            return unit && intermediate && dest ? [[unit, 'special:TACTIC', intermediate, dest]] : [];
+        }
         case 'TACTIC_ROYAL_GUARD': return unit && dest ? [[unit, 'special:TACTIC', dest]] : [];
         case 'TACTIC_MARSHALL': return unit && granted && target ? [[unit, 'special:TACTIC', granted, target]] : [];
         case 'TACTIC_FOOTMAN': {
@@ -869,7 +872,13 @@ function handleBoardKey(key, actions) {
         return;
     }
     boardPath = nextPath;
-    previewHexes = new Set(matches.flatMap((entry) => entry.action.relatedHexes));
+    // Only preview the hexes that are actually clickable on the next step.
+    // Multi-step Tactics used to paint the entire route yellow, which made
+    // non-clickable intermediate/final cells look actionable.
+    previewHexes = new Set(matches
+        .map((entry) => entry.path[nextPath.length])
+        .filter((nextKey) => Boolean(nextKey) && nextKey.startsWith('hex:'))
+        .map((nextKey) => nextKey.slice(4)));
     renderGame();
 }
 function renderInteractionHud(actions) {
@@ -921,6 +930,7 @@ function renderBoardSvg(actions = []) {
     if (!state)
         return '';
     const ui = boardInteractionState(actions);
+    const actionChips = [];
     const hexes = BOARD_HEXES.map((id) => {
         const { x, y } = axialToPixel(id);
         const isLocation = ALL_LOCATIONS.includes(id);
@@ -948,7 +958,6 @@ function renderBoardSvg(actions = []) {
         </g>`
             : '';
         let unitMark = '';
-        let badges = '';
         if (unit) {
             const d = UNIT_DEFS[unit.type];
             const ownerFill = unit.owner === 'human' ? '#275e67' : '#853f47';
@@ -969,14 +978,14 @@ function renderBoardSvg(actions = []) {
                     ['special:CONTROL', 'CONTROL', 'control'],
                 ];
                 let chipIndex = 0;
-                badges = specials.filter(([key]) => ui.nextKeys.has(key)).map(([key, label, cls]) => {
+                actionChips.push(...specials.filter(([key]) => ui.nextKeys.has(key)).map(([key, label, cls]) => {
                     const by = y - 44 + chipIndex * 23;
                     chipIndex += 1;
                     return `<g class="board-action-chip ${cls}" data-board-key="${key}" role="button"><rect x="${x + 30}" y="${by - 13}" width="68" height="20" rx="10"/><text x="${x + 64}" y="${by + 1}" text-anchor="middle">${label}</text></g>`;
-                }).join('');
+                }));
             }
         }
-        return `<g class="hex-cell ${isLocation ? 'location-hex' : ''} ${controller ? `controlled-${controller}` : ''} ${preview ? 'preview' : ''} ${hexCls}"${hexAttr}><polygon points="${hexPoints(x, y)}" fill="${fill}" stroke="${preview ? '#f4c65d' : '#b59558'}" stroke-width="${preview ? 4 : 1.6}"/>${locationMark}${unitMark}${badges}</g>`;
+        return `<g class="hex-cell ${isLocation ? 'location-hex' : ''} ${controller ? `controlled-${controller}` : ''} ${preview ? 'preview' : ''} ${hexCls}"${hexAttr}><polygon points="${hexPoints(x, y)}" fill="${fill}" stroke="${preview ? '#f4c65d' : '#b59558'}" stroke-width="${preview ? 4 : 1.6}"/>${locationMark}${unitMark}</g>`;
     }).join('');
     return `<svg class="battlefield" viewBox="54 58 852 560" role="img" aria-label="War Chest battlefield">
     <defs>
@@ -996,6 +1005,7 @@ function renderBoardSvg(actions = []) {
     <rect x="435" y="70" width="90" height="28" rx="8" fill="#a8a5a9" opacity=".42"/>
     <rect x="435" y="578" width="90" height="28" rx="8" fill="#a8a5a9" opacity=".42"/>
     ${hexes}
+    <g class="action-chip-layer">${actionChips.join('')}</g>
   </svg>`;
 }
 function renderBoardOnly() {

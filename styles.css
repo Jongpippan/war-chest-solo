@@ -2141,3 +2141,16 @@ button, .game-term, .round-chip, .turn-chip, .difficulty-chip, .rule-kind,
   .tabletop-player.bot .supply-icon,
   .tabletop-player.human .supply-icon { width:32px !important; height:32px !important; }
 }
+
+
+/* v0.10 battlefield click reliability */
+.hex-cell[data-board-key],
+.hex-cell[data-board-key] > polygon {
+  cursor: pointer !important;
+}
+.action-chip-layer { pointer-events: none; }
+.action-chip-layer .board-action-chip,
+.action-chip-layer .board-action-chip * {
+  pointer-events: all;
+  cursor: pointer !important;
+}
