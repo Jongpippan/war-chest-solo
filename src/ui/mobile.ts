@@ -163,7 +163,11 @@ function syncBoardUnitActionOverlay(): void {
     return;
   }
 
-  const unit = svg.querySelector<SVGGElement>(`.unit-token[data-board-key="unit:${unitId}"]`);
+  // Once a Unit is selected, main.ts rerenders it without data-board-key because
+  // the next legal inputs are the special actions. interaction-selected is the
+  // stable marker for the token that the action buttons belong to.
+  const unit = svg.querySelector<SVGGElement>('.unit-token.interaction-selected')
+    ?? svg.querySelector<SVGGElement>(`.unit-token[data-board-key="unit:${unitId}"]`);
   const center = unit?.querySelector<SVGCircleElement>('circle');
   if (!center) {
     existing?.remove();
