@@ -1,6 +1,6 @@
 const MOBILE_QUERY = '(max-width: 760px), (hover: none) and (pointer: coarse)';
 const STORAGE_KEY = 'war-chest-solo-local-v2';
-const GENERATED_ATTR = 'data-mobile-ui-generated';
+const GENERATED_ATTR = 'data-responsive-ui-generated';
 const LAST_BOT_ACTION_KEY = 'war-chest-solo-last-bot-action-v1';
 
 type StoredGameState = {
@@ -15,8 +15,7 @@ function isMobileUi(): boolean {
 }
 
 function visibleUnitTooltip(): HTMLElement | null {
-  const tooltip = document.querySelector<HTMLElement>('#unitTooltip.visible:not([hidden])');
-  return tooltip ?? null;
+  return document.querySelector<HTMLElement>('#unitTooltip.visible:not([hidden])');
 }
 
 function closeUnitTooltip(): void {
@@ -92,6 +91,10 @@ function syncBotLastAction(): void {
   }
 }
 
+function removeBotLastAction(): void {
+  document.querySelector<HTMLElement>('.mobile-bot-last-action')?.remove();
+}
+
 function actionLabel(source: Element): string {
   if (source.classList.contains('bolster')) return '증원';
   if (source.classList.contains('tactic')) return '전술';
@@ -99,35 +102,37 @@ function actionLabel(source: Element): string {
   return source.textContent?.trim() || '행동';
 }
 
+function selectedActionSources(): SVGGElement[] {
+  const popover = document.querySelector<SVGGElement>('.unit-action-popover');
+  if (!popover) return [];
+  return Array.from(popover.querySelectorAll<SVGGElement>('.board-action-chip[data-board-key]'));
+}
+
 function syncUnitActionBar(): void {
   const hud = document.querySelector<HTMLElement>('.interaction-hud');
-  const popover = document.querySelector<SVGGElement>('.unit-action-popover');
-  const existing = document.querySelector<HTMLElement>('.mobile-unit-actions');
+  const existing = document.querySelector<HTMLElement>('.context-unit-actions');
+  const sources = selectedActionSources();
 
-  if (!hud || !popover) {
+  if (!hud || !sources.length) {
     existing?.remove();
     return;
   }
 
-  const sources = Array.from(popover.querySelectorAll<SVGGElement>('.board-action-chip[data-board-key]'));
-  if (!sources.length) {
-    existing?.remove();
-    return;
-  }
-
-  const signature = sources.map((source) => source.dataset.boardKey ?? '').join('|');
+  const popover = sources[0].closest<SVGGElement>('.unit-action-popover');
+  const unitId = popover?.dataset.actionFor ?? '';
+  const signature = `${unitId}:${sources.map((source) => source.dataset.boardKey ?? '').join('|')}`;
   if (existing?.dataset.signature === signature && existing.parentElement === hud) return;
   existing?.remove();
 
   const bar = document.createElement('div');
-  bar.className = 'mobile-unit-actions';
+  bar.className = 'context-unit-actions';
   bar.setAttribute(GENERATED_ATTR, 'true');
   bar.dataset.signature = signature;
   bar.setAttribute('role', 'group');
   bar.setAttribute('aria-label', '선택한 유닛 행동');
 
   const label = document.createElement('span');
-  label.className = 'mobile-unit-actions-label';
+  label.className = 'context-unit-actions-label';
   label.textContent = '선택 유닛';
   bar.append(label);
 
@@ -136,7 +141,7 @@ function syncUnitActionBar(): void {
     if (!key) continue;
     const button = document.createElement('button');
     button.type = 'button';
-    button.className = `mobile-unit-action ${source.classList.contains('bolster') ? 'bolster' : source.classList.contains('tactic') ? 'tactic' : source.classList.contains('control') ? 'control' : ''}`;
+    button.className = `context-unit-action ${source.classList.contains('bolster') ? 'bolster' : source.classList.contains('tactic') ? 'tactic' : source.classList.contains('control') ? 'control' : ''}`;
     button.dataset.proxyBoardKey = key;
     button.textContent = actionLabel(source);
     bar.append(button);
@@ -145,42 +150,36 @@ function syncUnitActionBar(): void {
   hud.append(bar);
 }
 
-function removeGeneratedUi(): void {
-  document.querySelectorAll<HTMLElement>(`[${GENERATED_ATTR}="true"]`).forEach((node) => node.remove());
-}
-
-function syncMobileUi(): void {
+function syncResponsiveUi(): void {
   syncQueued = false;
-  if (!isMobileUi()) {
-    removeGeneratedUi();
-    return;
-  }
-
   captureBotActionToast();
-  syncBotLastAction();
   syncUnitActionBar();
+
+  if (isMobileUi()) syncBotLastAction();
+  else removeBotLastAction();
 }
 
 function queueSync(): void {
   if (syncQueued) return;
   syncQueued = true;
-  requestAnimationFrame(syncMobileUi);
+  requestAnimationFrame(syncResponsiveUi);
 }
 
 function onGeneratedActionClick(event: MouseEvent): void {
   const target = event.target as HTMLElement | null;
   const button = target?.closest<HTMLButtonElement>('[data-proxy-board-key]');
-  if (!button || !isMobileUi()) return;
+  if (!button) return;
 
   const key = button.dataset.proxyBoardKey;
   if (!key) return;
-  const source = Array.from(document.querySelectorAll<Element>('[data-board-key]'))
-    .find((candidate) => (candidate as HTMLElement).dataset.boardKey === key && candidate.closest('.unit-action-popover'));
+  const source = selectedActionSources().find((candidate) => candidate.dataset.boardKey === key);
   if (!source) return;
+
+  event.preventDefault();
   source.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
 }
 
-function startMobileUi(): void {
+function startResponsiveUi(): void {
   document.addEventListener('pointerdown', onPointerDownCapture, true);
   document.addEventListener('click', onClickCapture, true);
   document.addEventListener('click', onGeneratedActionClick);
@@ -193,4 +192,4 @@ function startMobileUi(): void {
   queueSync();
 }
 
-startMobileUi();
+startResponsiveUi();
