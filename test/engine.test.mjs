@@ -103,15 +103,14 @@ test('standard Deploy targets only empty controlled Locations', () => {
   }
 });
 
-test('2-player physical starting and neutral Locations match the base board', () => {
-  assert.deepEqual(HUMAN_STARTS, [hexId(-2, 2), hexId(0, 2)]);
-  assert.deepEqual(BOT_STARTS, [hexId(0, -2), hexId(2, -2)]);
+test('2-player physical starting and neutral Locations match the supplied board reference', () => {
+  assert.deepEqual(HUMAN_STARTS, [hexId(1, 2), hexId(-2, 3)]);
+  assert.deepEqual(BOT_STARTS, [hexId(-1, -2), hexId(2, -3)]);
   assert.deepEqual(new Set(NEUTRAL_LOCATIONS), new Set([
-    hexId(-1, -1), hexId(1, -1), hexId(3, -1),
-    hexId(-3, 1), hexId(-1, 1), hexId(1, 1),
+    hexId(1, -1), hexId(-1, 1), hexId(-2, 0),
+    hexId(2, 0), hexId(3, -2), hexId(-3, 2),
   ]));
 });
-
 
 test('deploy destinations are controlled locations', () => {
   const state = createGame(['SWORDSMAN','PIKEMAN','CROSSBOWMAN','LIGHT_CAVALRY'], ['ARCHER','CAVALRY','LANCER','SCOUT'], 'human');
