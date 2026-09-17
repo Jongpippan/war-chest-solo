@@ -58,8 +58,8 @@ const tacticChip = page.locator('.unit-action-popover .board-action-chip.tactic'
 await tacticChip.waitFor({ state: 'attached' });
 assert.equal(await bolsterChip.count(), 1, 'Bolster chip should be attached to selected own Unit');
 assert.equal(await tacticChip.count(), 1, 'Tactic chip should be attached to selected own Unit');
-const tacticBox = await tacticChip.boundingBox();
-assert(tacticBox && tacticBox.width > 20 && tacticBox.height > 10, 'Tactic chip must have a visible SVG bounding box');
+const tacticRectBox = await page.locator('.unit-action-popover .board-action-chip.tactic rect').boundingBox();
+assert(tacticRectBox && tacticRectBox.width > 20 && tacticRectBox.height > 10, 'Tactic chip rect must have visible SVG geometry');
 await page.screenshot({ path: '.v12/screens/desktop-selected-unit-actions.png', fullPage: true });
 
 const botUnit = page.locator('.unit-token[data-owner-label="Bot Unit"]');
