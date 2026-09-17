@@ -18,6 +18,9 @@ async function seedLightCavalryGame(page) {
     state.players.human.hand = ['LIGHT_CAVALRY'];
     state.players.human.bag = [];
     state.players.human.discard = [];
+    state.players.bot.hand = [];
+    state.players.bot.bag = [];
+    state.players.bot.discard = [];
     state.boardUnits = [
       { id: 'u-test-light', owner: 'human', type: 'LIGHT_CAVALRY', hex: '0,0', strength: 1 },
     ];
@@ -30,15 +33,16 @@ async function seedLightCavalryGame(page) {
   await page.waitForSelector('.battlefield');
 }
 
-async function assertRealUnitActions(page, viewportName) {
+async function selectLightCavalry(page) {
   const unit = page.locator('.unit-token[data-unit-type="LIGHT_CAVALRY"][data-board-key]').first();
   await unit.click();
-
-  // main.ts still creates the SVG action data, while the responsive layer turns
-  // it into real HTML buttons anchored directly above the selected battlefield Unit.
   await page.waitForSelector('.unit-action-popover', { state: 'attached' });
   await page.waitForSelector('.board-unit-action-overlay', { state: 'attached' });
   await page.waitForSelector('.board-unit-action-button', { state: 'visible' });
+}
+
+async function assertBolsterIsAtomic(page, viewportName) {
+  await selectLightCavalry(page);
 
   const labels = await page.locator('.board-unit-action-button').allTextContents();
   assert.ok(labels.includes('증원'), `${viewportName}: Bolster must appear above the selected Unit`);
@@ -52,12 +56,48 @@ async function assertRealUnitActions(page, viewportName) {
   }));
   assert.ok(position.y < position.unitY, `${viewportName}: action buttons must be positioned above the Unit token`);
 
-  await page.locator('.board-unit-action-button.bolster').click();
-  await page.waitForTimeout(1050);
+  // Deliberately emit two click attempts against the same visible control. The
+  // interaction layer must consume the first one immediately and make the
+  // stale overlay inert before a second click-like event can dispatch another action.
+  await page.locator('.board-unit-action-button.bolster').evaluate((button) => {
+    button.click();
+    button.click();
+  });
+
+  await page.waitForFunction(() => {
+    const saved = JSON.parse(localStorage.getItem('war-chest-solo-local-v2') || 'null');
+    return saved?.boardUnits?.find((candidate) => candidate.id === 'u-test-light')?.strength === 2;
+  });
 
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('war-chest-solo-local-v2') || 'null'));
   const light = saved?.boardUnits?.find((candidate) => candidate.id === 'u-test-light');
-  assert.equal(light?.strength, 2, `${viewportName}: battlefield Bolster button must execute the real game action`);
+  assert.equal(light?.strength, 2, `${viewportName}: Bolster must add exactly one coin even under duplicate click attempts`);
+  assert.equal(light?.hex, '0,0', `${viewportName}: Bolster must never move the Unit`);
+  assert.equal(saved?.players?.human?.hand?.length, 0, `${viewportName}: Bolster must consume exactly the selected hand coin`);
+  assert.equal(saved?.log?.filter((line) => line.includes('경기병') && line.includes('이동했습니다')).length ?? 0, 0, `${viewportName}: Bolster must not emit a Move result`);
+}
+
+async function assertMoveIsAtomic(page, viewportName) {
+  await seedLightCavalryGame(page);
+  await selectLightCavalry(page);
+
+  const moveTarget = page.locator('.hex-cell.move-target[data-board-key^="hex:"]').first();
+  assert.equal(await moveTarget.isVisible(), true, `${viewportName}: a normal Move destination must be visible after selecting the Unit`);
+  const destinationKey = await moveTarget.getAttribute('data-board-key');
+  assert.ok(destinationKey?.startsWith('hex:'), `${viewportName}: Move target must carry a battlefield hex key`);
+  const destination = destinationKey.slice(4);
+  await moveTarget.click();
+
+  await page.waitForFunction((expected) => {
+    const saved = JSON.parse(localStorage.getItem('war-chest-solo-local-v2') || 'null');
+    return saved?.boardUnits?.find((candidate) => candidate.id === 'u-test-light')?.hex === expected;
+  }, destination);
+
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('war-chest-solo-local-v2') || 'null'));
+  const light = saved?.boardUnits?.find((candidate) => candidate.id === 'u-test-light');
+  assert.equal(light?.hex, destination, `${viewportName}: Move must end on the selected destination only`);
+  assert.equal(light?.strength, 1, `${viewportName}: Move must never Bolster the Unit`);
+  assert.equal(saved?.players?.human?.hand?.length, 0, `${viewportName}: Move must consume exactly the selected hand coin`);
 }
 
 try {
@@ -98,7 +138,8 @@ try {
   assert.equal(await page.locator('[data-utility="log"]').isVisible(), true, 'Log button must be visible on mobile');
   assert.equal(await page.locator('.utility-toolbar').isVisible(), true, 'utility toolbar must be visible on mobile');
   assert.equal(await page.locator('.mobile-bot-last-action').isVisible(), true, 'last bot action panel must be visible on mobile');
-  await assertRealUnitActions(page, 'mobile');
+  await assertBolsterIsAtomic(page, 'mobile');
+  await assertMoveIsAtomic(page, 'mobile');
   await mobileContext.close();
 
   const desktopContext = await browser.newContext({ viewport: { width: 1440, height: 900 } });
@@ -108,11 +149,12 @@ try {
   const desktopPage = await desktopContext.newPage();
   await desktopPage.goto(baseUrl, { waitUntil: 'networkidle' });
   await seedLightCavalryGame(desktopPage);
-  await assertRealUnitActions(desktopPage, 'desktop');
+  await assertBolsterIsAtomic(desktopPage, 'desktop');
+  await assertMoveIsAtomic(desktopPage, 'desktop');
   assert.equal(await desktopPage.locator('.mobile-bot-last-action').count(), 0, 'mobile-only bot summary must stay off desktop');
   await desktopContext.close();
 
-  console.log('responsive real-game UI regression checks passed');
+  console.log('responsive atomic-action UI regression checks passed');
 } finally {
   await browser.close();
 }
