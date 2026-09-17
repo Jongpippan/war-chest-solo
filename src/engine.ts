@@ -27,6 +27,30 @@ import type {
 let unitSequence = 1;
 let actionSequence = 1;
 
+export function normalizeUnitIds(state: GameState): void {
+  const seen = new Set<string>();
+  let next = 1;
+  for (const unit of state.boardUnits) {
+    const match = /^u(\d+)$/.exec(unit.id);
+    if (match) next = Math.max(next, Number(match[1]) + 1);
+  }
+  for (const unit of state.boardUnits) {
+    if (!unit.id || seen.has(unit.id)) {
+      let replacement = `u${next++}`;
+      while (seen.has(replacement)) replacement = `u${next++}`;
+      unit.id = replacement;
+    }
+    seen.add(unit.id);
+  }
+  unitSequence = Math.max(unitSequence, next);
+}
+
+function nextUnitId(state: GameState): string {
+  let id = `u${unitSequence++}`;
+  while (state.boardUnits.some((unit) => unit.id === id)) id = `u${unitSequence++}`;
+  return id;
+}
+
 export const otherPlayer = (id: PlayerId): PlayerId => (id === 'human' ? 'bot' : 'human');
 
 export function shuffle<T>(items: T[]): T[] {
@@ -476,11 +500,12 @@ export function generatePendingActions(state: GameState): ActionCandidate[] {
 }
 
 function removeBoardCoin(state: GameState, unit: BoardUnit): void {
+  // Every Attack removes exactly one coin. Bolster increases durability, not damage.
   unit.strength -= 1;
   state.players[unit.owner].removed.push(unit.type);
   if (unit.strength <= 0) {
     state.boardUnits = state.boardUnits.filter((u) => u.id !== unit.id);
-    addLog(state, `${UNIT_DEFS[unit.type].ko} 유닛이 제거되었습니다.`);
+    addLog(state, `${unit.owner === 'human' ? '당신' : '봇'}의 ${UNIT_DEFS[unit.type].ko} 유닛이 Removed되었습니다.`);
   }
 }
 
@@ -496,26 +521,30 @@ function royalGuardAbsorbsFromSupply(state: GameState, target: BoardUnit): boole
 }
 
 function applyAttack(state: GameState, attacker: BoardUnit, target: BoardUnit, adjacentAttack: boolean): void {
+  // Capture identities before any coin removal. A destroyed target no longer exists on board afterwards.
   const attackerName = UNIT_DEFS[attacker.type].ko;
   const targetName = UNIT_DEFS[target.type].ko;
-  addLog(state, `${attacker.owner === 'human' ? '당신' : '봇'}의 ${attackerName}이(가) ${targetName}을(를) 공격했습니다.`);
+  const targetType = target.type;
 
   if (royalGuardAbsorbsFromSupply(state, target)) {
     const p = state.players[target.owner];
     p.supply.ROYAL_GUARD = (p.supply.ROYAL_GUARD ?? 0) - 1;
     p.removed.push('ROYAL_GUARD');
-    addLog(state, `근위병이 Supply 코인으로 공격을 흡수했습니다.`);
+    addLog(state, `근위병이 Supply 코인으로 Attack을 흡수했습니다.`);
   } else {
     removeBoardCoin(state, target);
   }
 
-  if (target.type === 'PIKEMAN' && adjacentAttack) {
+  if (targetType === 'PIKEMAN' && adjacentAttack) {
     const liveAttacker = getUnit(state, attacker.id);
     if (liveAttacker) {
       addLog(state, `장창병의 반격으로 ${attackerName}도 코인 1개를 잃습니다.`);
       removeBoardCoin(state, liveAttacker);
     }
   }
+
+  // Added last so the reverse-chronological UI presents the Attack before its damage/removal detail.
+  addLog(state, `${attacker.owner === 'human' ? '당신' : '봇'}의 ${attackerName}이(가) ${targetName}을(를) Attack했습니다.`);
 }
 
 function setPostManeuverTrigger(state: GameState, playerId: PlayerId, unitId: string, maneuver: 'MOVE' | 'ATTACK' | 'CONTROL'): void {
@@ -669,7 +698,7 @@ export function executeAction(state: GameState, action: ActionCandidate): void {
       consumeCandidateCoin(state, action, 'BOARD');
       const type = action.payload.unitType!;
       const destination = action.payload.destination!;
-      state.boardUnits.push({ id: `u${unitSequence++}`, owner: playerId, type, hex: destination, strength: 1 });
+      state.boardUnits.push({ id: nextUnitId(state), owner: playerId, type, hex: destination, strength: 1 });
       addLog(state, `${pName}이(가) ${UNIT_DEFS[type].ko}을(를) ${coordinateLabel(destination)}에 배치했습니다.`);
       break;
     }

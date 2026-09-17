@@ -4,6 +4,7 @@ import {
   createGame,
   generateActionsForCoin,
   executeAction,
+  normalizeUnitIds,
   unitAt,
 } from '../dist/engine.js';
 import { ALL_LOCATIONS, HUMAN_STARTS, BOT_STARTS, NEUTRAL_LOCATIONS, hexId } from '../dist/board.js';
@@ -128,4 +129,42 @@ test('physical board image coordinates are used for the 2-player Locations', () 
   assert.deepEqual(new Set(BOT_STARTS), new Set(['-1,-2', '2,-3']));
   assert.deepEqual(new Set(HUMAN_STARTS), new Set(['1,2', '-2,3']));
   assert.deepEqual(new Set(NEUTRAL_LOCATIONS), new Set(['1,-1', '-1,1', '-2,0', '2,0', '3,-2', '-3,2']));
+});
+
+
+test('Bolster is durability only: one Attack removes exactly one defender coin', () => {
+  const s = emptyState();
+  s.players.human.hand = ['SWORDSMAN'];
+  s.boardUnits = [
+    { id: 'attacker', owner: 'human', type: 'SWORDSMAN', hex: '0,0', strength: 3 },
+    { id: 'target', owner: 'bot', type: 'SCOUT', hex: '1,0', strength: 3 },
+  ];
+  const action = generateActionsForCoin(s, 'human', 'SWORDSMAN', 'HAND', 0)
+    .find((candidate) => candidate.kind === 'ATTACK' && candidate.payload.targetUnitId === 'target');
+  assert(action);
+  executeAction(s, action);
+  assert.equal(unitAt(s, '0,0')?.strength, 3, 'attacker strength does not multiply damage');
+  assert.equal(unitAt(s, '1,0')?.strength, 2, 'defender loses one coin, not the whole stack');
+  assert.equal(s.players.bot.removed.filter((coin) => coin === 'SCOUT').length, 1);
+  assert(s.log.some((line) => line.includes('검병') && line.includes('정찰병') && line.includes('Attack')));
+});
+
+test('saved games with duplicate unit IDs are repaired before actions resolve', () => {
+  const s = emptyState();
+  s.players.human.hand = ['LIGHT_CAVALRY'];
+  s.boardUnits = [
+    { id: 'u1', owner: 'human', type: 'LIGHT_CAVALRY', hex: '0,0', strength: 2 },
+    { id: 'u1', owner: 'bot', type: 'SCOUT', hex: '1,0', strength: 2 },
+  ];
+  normalizeUnitIds(s);
+  assert.equal(new Set(s.boardUnits.map((unit) => unit.id)).size, 2);
+  const target = s.boardUnits.find((unit) => unit.owner === 'bot');
+  assert(target);
+  const action = generateActionsForCoin(s, 'human', 'LIGHT_CAVALRY', 'HAND', 0)
+    .find((candidate) => candidate.kind === 'ATTACK' && candidate.payload.targetUnitId === target.id);
+  assert(action);
+  executeAction(s, action);
+  assert.equal(s.boardUnits.find((unit) => unit.owner === 'bot')?.type, 'SCOUT');
+  assert.equal(s.boardUnits.find((unit) => unit.owner === 'bot')?.strength, 1);
+  assert(s.log.some((line) => line.includes('경기병') && line.includes('정찰병') && line.includes('Attack')));
 });

@@ -7,6 +7,7 @@ import {
   executeAction,
   generateActionsForCoin,
   generatePendingActions,
+  normalizeUnitIds,
   stateSanity,
 } from './engine.js';
 import { chooseBotDecision, type BotDecision } from './bot.js';
@@ -47,6 +48,20 @@ let lastBotThought: BotThought | null = null;
 let botThoughtHistory: BotThought[] = [];
 let utilityPanel: 'analysis' | 'bot' | 'log' | null = null;
 let boardPath: string[] = [];
+
+type ActionAnimation = {
+  player: PlayerId;
+  kind: ActionCandidate['kind'];
+  label: string;
+  unitId?: string;
+  unitType?: UnitType;
+  fromHex?: HexId;
+  toHex?: HexId;
+  targetHex?: HexId;
+  targetType?: UnitType;
+};
+let actionAnimation: ActionAnimation | null = null;
+let actionAnimating = false;
 
 function esc(value: string): string {
   return value.replace(/[&<>'"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[ch]!));
@@ -358,6 +373,10 @@ function loadSavedState(): GameState | null {
     if (!raw) return null;
     const parsed = JSON.parse(raw) as GameState;
     if (!parsed.players?.human || !parsed.players?.bot || !parsed.locations) return null;
+    // Older saved games could reuse u1/u2 after a page reload because the in-memory sequence reset.
+    // Repair those IDs before any new Action is generated, then persist the migrated save.
+    normalizeUnitIds(parsed);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
     return parsed;
   } catch {
     return null;
@@ -375,6 +394,8 @@ function resetSessionUi(): void {
   undoStack = [];
   lastBotThought = null;
   botThoughtHistory = [];
+  actionAnimation = null;
+  actionAnimating = false;
 }
 
 function startGameWithArmies(human: UnitType[], bot: UnitType[], initiative?: PlayerId): void {
@@ -902,20 +923,50 @@ function boardTargetClass(key: string, ui: ReturnType<typeof boardInteractionSta
   return `${ui.nextKeys.has(key) ? 'actionable interaction-target' : ''} ${ui.selectedKeys.has(key) ? 'interaction-selected' : ''} ${attack ? 'attack-target' : ''} ${deploy ? 'deploy-target' : ''} ${move ? 'move-target' : ''}`;
 }
 
-function executeHumanAction(action: ActionCandidate): void {
-  if (!state) return;
+function describeActionAnimation(before: GameState, action: ActionCandidate): ActionAnimation {
+  const actingId = (action.kind === 'TACTIC_ENSIGN' || action.kind === 'TACTIC_MARSHALL')
+    ? action.payload.grantedUnitId
+    : action.payload.unitId;
+  const actor = actingId ? before.boardUnits.find((unit) => unit.id === actingId) : undefined;
+  const target = action.payload.targetUnitId ? before.boardUnits.find((unit) => unit.id === action.payload.targetUnitId) : undefined;
+  return {
+    player: action.player,
+    kind: action.kind,
+    label: action.label,
+    unitId: actor?.id,
+    unitType: actor?.type ?? action.payload.unitType,
+    fromHex: actor?.hex,
+    toHex: action.payload.destination,
+    targetHex: target?.hex,
+    targetType: target?.type,
+  };
+}
+
+async function executeHumanAction(action: ActionCandidate): Promise<void> {
+  if (!state || actionAnimating) return;
   previewHexes.clear();
+  const before = cloneState(state);
   try {
-    if (action.source === 'HAND') undoStack.push(cloneState(state));
+    if (action.source === 'HAND') undoStack.push(before);
+    actionAnimation = describeActionAnimation(before, action);
+    actionAnimating = true;
     executeAction(state, action);
-    afterResolvedAction(state);
     selectedCoinIndex = 0;
     boardPath = [];
     saveState();
+    renderGame();
+    await sleep(960);
+    actionAnimation = null;
+    actionAnimating = false;
+    afterResolvedAction(state);
+    saveState();
     render();
   } catch (error) {
+    actionAnimation = null;
+    actionAnimating = false;
     console.error(error);
     alert(`Action error: ${error instanceof Error ? error.message : String(error)}`);
+    render();
   }
 }
 
@@ -931,7 +982,7 @@ function handleBoardKey(key: string, actions: ActionCandidate[]): void {
   const complete = matches.find((entry) => entry.path.length === nextPath.length);
   const hasLonger = matches.some((entry) => entry.path.length > nextPath.length);
   if (complete && !hasLonger) {
-    executeHumanAction(complete.action);
+    void executeHumanAction(complete.action);
     return;
   }
   boardPath = nextPath;
@@ -966,7 +1017,7 @@ function renderContextBoardActions(actions: ActionCandidate[]): string {
 function renderInteractionHud(actions: ActionCandidate[]): string {
   if (!state) return '';
   if (state.winner) return `<div class="interaction-hud game-over-hud">GAME OVER</div>`;
-  if (state.activePlayer !== 'human') return `<div class="interaction-hud bot-turn-hud"><strong>BOT TURN</strong><span>Watch <b>BOT LAST MOVE</b> in the header when the action resolves.</span></div>`;
+  if (state.activePlayer !== 'human') return `<div class="interaction-hud bot-turn-hud"><strong>BOT TURN</strong><span>${actionAnimating ? 'Resolving the highlighted action…' : 'The bot is choosing an action…'}</span></div>`;
   const coin = selectedHumanCoin();
   const info = coin ? infoForCoin(coin) : null;
   const skip = actions.find((a) => a.kind === 'SKIP_ABILITY');
@@ -975,7 +1026,7 @@ function renderInteractionHud(actions: ActionCandidate[]): string {
     : 'Select a Coin, then use highlighted Units, Locations and hexes directly.';
   return `<div class="interaction-hud compact-hud">
     <div class="selected-coin-hud">${coin && info ? `<span class="table-coin front static" style="--coin-accent:${info.accent}" data-unit-type="${coin}"><span class="table-coin-inner">${unitIconSvg(coin)}</span></span><div><small>SELECTED COIN</small><strong>${esc(coinLabel(coin))}</strong></div>` : '<div><small>SELECTED COIN</small><strong>NONE</strong></div>'}</div>
-    <div class="interaction-copy"><strong>Battlefield input</strong><span>${stepCopy}</span><div class="interaction-legend">${gameTerm('Deploy')} · ${gameTerm('Maneuver')} · ${gameTerm('Bolster')} · ${gameTerm('Tactic')} · ${gameTerm('Control')}</div>${renderContextBoardActions(actions)}</div>
+    <div class="interaction-copy"><strong>Battlefield input</strong><span>${stepCopy}</span><div class="interaction-legend">${gameTerm('Deploy')} · ${gameTerm('Maneuver')} · ${gameTerm('Bolster')} · ${gameTerm('Tactic')} · ${gameTerm('Control')}</div></div>
     <div class="face-down-guide"><span>Supply → ${gameTerm('Recruit')}</span><span>Initiative → ${gameTerm('Claim Initiative')}</span><span>Discard → ${gameTerm('Pass')}</span></div>
     <div class="interaction-hud-actions">${boardPath.length ? '<button type="button" id="cancelBoardPath" class="micro-action">Cancel</button>' : ''}${skip ? '<button type="button" id="skipAbilityBtn" class="micro-action">Skip Ability</button>' : ''}</div>
   </div>`;
@@ -999,6 +1050,48 @@ function hexPoints(cx: number, cy: number, size = 34): string {
   return pts.join(' ');
 }
 
+function renderActionPlaybackSvg(): string {
+  if (!actionAnimation) return '';
+  const a = actionAnimation;
+  const ownerColor = a.player === 'human' ? '#2f7f87' : '#a14e59';
+  const pieces: string[] = [];
+  if (a.fromHex && a.toHex && a.fromHex !== a.toHex) {
+    const from = axialToPixel(a.fromHex);
+    const to = axialToPixel(a.toHex);
+    pieces.push(`<path class="action-motion-path" d="M ${from.x} ${from.y} L ${to.x} ${to.y}"/>`);
+    if (a.unitType) {
+      pieces.push(`<g class="action-moving-token" style="color:${UNIT_DEFS[a.unitType].accent}" transform="translate(${from.x} ${from.y})">
+        <circle cx="0" cy="0" r="32" fill="${ownerColor}" stroke="#fff1c9" stroke-width="3"/>
+        <circle cx="0" cy="0" r="26" fill="${UNIT_DEFS[a.unitType].accent}" stroke="rgba(255,255,255,.6)" stroke-width="1.5"/>
+        <g transform="translate(-15 -15) scale(1.25)">${unitIconPaths(a.unitType)}</g>
+        <animateTransform attributeName="transform" type="translate" from="${from.x} ${from.y}" to="${to.x} ${to.y}" dur="0.9s" fill="freeze"/>
+      </g>`);
+    }
+  }
+  if (a.targetHex) {
+    const target = axialToPixel(a.targetHex);
+    pieces.push(`<circle class="action-target-pulse" cx="${target.x}" cy="${target.y}" r="39"/>`);
+    if (a.fromHex) {
+      const from = axialToPixel(a.fromHex);
+      pieces.push(`<path class="action-strike" d="M ${from.x} ${from.y} L ${target.x} ${target.y}"/>`);
+    }
+  }
+  if (!a.targetHex && a.toHex && (!a.fromHex || a.fromHex === a.toHex)) {
+    const point = axialToPixel(a.toHex);
+    pieces.push(`<circle class="action-target-pulse ${a.kind === 'BOLSTER' ? 'bolster' : ''}" cx="${point.x}" cy="${point.y}" r="39"/>`);
+  }
+  if (a.kind === 'BOLSTER' && a.fromHex) {
+    const point = axialToPixel(a.fromHex);
+    pieces.push(`<text class="action-plus-one" x="${point.x + 30}" y="${point.y - 31}">+1</text>`);
+  }
+  return pieces.length ? `<g class="action-animation-layer" pointer-events="none">${pieces.join('')}</g>` : '';
+}
+
+function renderActionPlaybackToast(): string {
+  if (!actionAnimation) return '';
+  return `<div class="action-playback-toast ${actionAnimation.player}"><span>${actionAnimation.player === 'human' ? 'YOU' : 'BOT'}</span><strong>${formatGameText(actionAnimation.label)}</strong></div>`;
+}
+
 function fourPlayerWing(side: 'left' | 'right'): string {
   const ids: HexId[] = side === 'left'
     ? ['-4,1', '-5,2', '-4,2', '-5,3', '-4,3']
@@ -1016,6 +1109,7 @@ function renderBoardSvg(actions: ActionCandidate[] = []): string {
   const unitLayer: string[] = [];
   const locationOverlayLayer: string[] = [];
   const stackBadgeLayer: string[] = [];
+  const actionChipLayer: string[] = [];
 
   const hexes = BOARD_HEXES.map((id) => {
     const { x, y } = axialToPixel(id);
@@ -1053,7 +1147,7 @@ function renderBoardSvg(actions: ActionCandidate[] = []): string {
       const unitKey = `unit:${unit.id}`;
       const unitCls = boardTargetClass(unitKey, ui);
       const unitAttr = ui.nextKeys.has(unitKey) ? ` data-board-key="${unitKey}" role="button"` : '';
-      unitLayer.push(`<g class="token unit-token ${unitCls}"${unitAttr} data-unit-type="${unit.type}" data-owner-label="${unit.owner === 'human' ? 'Your Unit' : 'Bot Unit'}" data-stack="${unit.strength}" data-location="${coordinateLabel(id)}">
+      unitLayer.push(`<g class="token unit-token ${unitCls} ${actionAnimating && actionAnimation?.unitId === unit.id && actionAnimation.fromHex && actionAnimation.toHex && actionAnimation.fromHex !== actionAnimation.toHex ? 'animation-hidden' : ''}"${unitAttr} data-unit-type="${unit.type}" data-owner-label="${unit.owner === 'human' ? 'Your Unit' : 'Bot Unit'}" data-stack="${unit.strength}" data-location="${coordinateLabel(id)}">
         <circle cx="${x}" cy="${y + 3}" r="34" fill="rgba(0,0,0,.2)"/>
         <circle cx="${x}" cy="${y}" r="33" fill="${ownerFill}" stroke="#f4e7c3" stroke-width="2.8"/>
         <circle cx="${x}" cy="${y}" r="27" fill="${d.accent}" stroke="rgba(255,255,255,.58)" stroke-width="1.7"/>
@@ -1061,6 +1155,22 @@ function renderBoardSvg(actions: ActionCandidate[] = []): string {
       </g>`);
       if (unit.strength > 1) {
         stackBadgeLayer.push(`<g class="stack-badge" data-stack-badge="${unit.id}" pointer-events="none"><circle cx="${x + 23}" cy="${y - 22}" r="12.5" fill="#fff5db" stroke="#453722" stroke-width="1.8"/><text x="${x + 23}" y="${y - 18}" text-anchor="middle" class="stack-count">${unit.strength}</text></g>`);
+      }
+      if (unit.owner === 'human' && ui.selectedKeys.has(unitKey)) {
+        const choices = [
+          ['special:BOLSTER', 'BOLSTER', 'bolster'],
+          ['special:TACTIC', 'TACTIC', 'tactic'],
+          ['special:CONTROL', 'CONTROL', 'control'],
+        ] as const;
+        const available = choices.filter(([key]) => ui.nextKeys.has(key));
+        if (available.length) {
+          const width = 62;
+          const gap = 5;
+          const total = available.length * width + (available.length - 1) * gap;
+          const startX = x - total / 2;
+          const chipY = y - 58;
+          actionChipLayer.push(`<g class="unit-action-popover" data-action-for="${unit.id}"><line x1="${x}" y1="${y - 33}" x2="${x}" y2="${chipY + 19}"/>${available.map(([key, label, cls], index) => `<g class="board-action-chip ${cls}" data-board-key="${key}" role="button"><rect x="${startX + index * (width + gap)}" y="${chipY}" width="${width}" height="22" rx="11"/><text x="${startX + index * (width + gap) + width / 2}" y="${chipY + 14.5}" text-anchor="middle">${label}</text></g>`).join('')}</g>`);
+        }
       }
     }
 
@@ -1088,6 +1198,8 @@ function renderBoardSvg(actions: ActionCandidate[] = []): string {
     <g class="unit-layer">${unitLayer.join('')}</g>
     <g class="location-overlay-layer">${locationOverlayLayer.join('')}</g>
     <g class="stack-badge-layer">${stackBadgeLayer.join('')}</g>
+    <g class="action-chip-layer">${actionChipLayer.join('')}</g>
+    ${renderActionPlaybackSvg()}
   </svg>`;
 }
 
@@ -1118,7 +1230,7 @@ function coinButtons(): string {
 }
 
 function humanCandidates(): ActionCandidate[] {
-  if (!state || state.activePlayer !== 'human' || state.winner) return [];
+  if (!state || actionAnimating || state.activePlayer !== 'human' || state.winner) return [];
   if (state.pending) return generatePendingActions(state);
   if (state.forcedCoin?.player === 'human') return generateActionsForCoin(state, 'human', state.forcedCoin.coin, 'FORCED');
   const hand = state.players.human.hand;
@@ -1254,11 +1366,11 @@ function renderGame(): void {
   const actions = state.activePlayer === 'human' && !state.winner ? humanCandidates() : [];
   const sanity = stateSanity(state);
   app.innerHTML = `<main class="game-shell">
-    <header class="topbar compact integrated-header"><div class="brand-lockup"><div class="eyebrow">LOCAL SOLO · DIRECT TABLE INPUT</div><h1>War Chest Solo</h1></div><div class="header-center">${renderHeaderControls(actions)}${renderBotLastAction()}</div><div class="topbar-actions"><button id="undoBtn" class="ghost" ${undoStack.length && !botBusy ? '' : 'disabled'}>↶ Undo</button><button id="rulesBtn" class="ghost">Rules</button><button id="restartBtn" class="ghost danger">Restart</button></div></header>
+    <header class="topbar compact integrated-header"><div class="brand-lockup"><div class="eyebrow">LOCAL SOLO · DIRECT TABLE INPUT</div><h1>War Chest Solo</h1></div><div class="header-center">${renderHeaderControls(actions)}</div><div class="topbar-actions"><button id="undoBtn" class="ghost" ${undoStack.length && !botBusy ? '' : 'disabled'}>↶ Undo</button><button id="rulesBtn" class="ghost">Rules</button><button id="restartBtn" class="ghost danger">Restart</button></div></header>
     ${sanity.length ? `<div class="debug-warning">State warning: ${esc(sanity.join(' / '))}</div>` : ''}
     <section class="workspace-grid direct-table-layout">
       <aside class="left-rail player-rail bot-side">${renderPlayerPanel('bot', actions)}</aside>
-      <section class="board-stage"><div class="board-panel"><div class="board-title"><div><div class="eyebrow">BATTLEFIELD</div><h2>2-Player Battlefield</h2></div><div class="board-legend"><span><i class="legend-dot bot"></i>BOT</span><span><i class="legend-dot human"></i>YOU</span><span><i class="legend-location"></i>LOCATION</span></div></div><div id="boardHost">${renderBoardSvg(actions)}</div>${renderInteractionHud(actions)}</div></section>
+      <section class="board-stage"><div class="board-panel"><div class="board-title"><div><div class="eyebrow">BATTLEFIELD</div><h2>2-Player Battlefield</h2></div><div class="board-legend"><span><i class="legend-dot bot"></i>BOT</span><span><i class="legend-dot human"></i>YOU</span><span><i class="legend-location"></i>LOCATION</span></div></div><div id="boardHost">${renderBoardSvg(actions)}</div>${renderActionPlaybackToast()}${renderInteractionHud(actions)}</div></section>
       <aside class="right-rail player-rail human-side">${renderPlayerPanel('human', actions)}</aside>
     </section>
     ${renderUtilityDrawer()}
@@ -1284,19 +1396,19 @@ function renderGame(): void {
   document.querySelectorAll<HTMLElement>('[data-recruit-type]').forEach((el) => el.addEventListener('click', () => {
     const type = el.dataset.recruitType as UnitType;
     const action = actions.find((a) => a.kind === 'RECRUIT' && a.payload.recruitType === type);
-    if (action) executeHumanAction(action);
+    if (action) void executeHumanAction(action);
   }));
   document.querySelector<HTMLElement>('[data-pass-action]')?.addEventListener('click', () => {
     const action = actions.find((a) => a.kind === 'PASS');
-    if (action) executeHumanAction(action);
+    if (action) void executeHumanAction(action);
   });
   document.querySelector('#claimInitiativeToken')?.addEventListener('click', () => {
     const action = actions.find((a) => a.kind === 'CLAIM_INITIATIVE');
-    if (action) executeHumanAction(action);
+    if (action) void executeHumanAction(action);
   });
   document.querySelector('#skipAbilityBtn')?.addEventListener('click', () => {
     const action = actions.find((a) => a.kind === 'SKIP_ABILITY');
-    if (action) executeHumanAction(action);
+    if (action) void executeHumanAction(action);
   });
   document.querySelector('#cancelBoardPath')?.addEventListener('click', () => {
     boardPath = [];
@@ -1338,7 +1450,15 @@ async function runBot(): Promise<void> {
         break;
       }
       rememberBotDecision(decision);
+      const before = cloneState(state);
+      actionAnimation = describeActionAnimation(before, decision.action);
+      actionAnimating = true;
       executeAction(state, decision.action);
+      saveState();
+      renderGame();
+      await sleep(960);
+      actionAnimation = null;
+      actionAnimating = false;
       afterResolvedAction(state);
       saveState();
       renderGame();
@@ -1347,6 +1467,8 @@ async function runBot(): Promise<void> {
     console.error(error);
     alert(`봇 처리 중 오류: ${error instanceof Error ? error.message : String(error)}`);
   } finally {
+    actionAnimation = null;
+    actionAnimating = false;
     botBusy = false;
     render();
   }
