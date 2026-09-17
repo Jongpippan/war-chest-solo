@@ -1,0 +1,147 @@
+/* Mobile interaction layer: keeps touch behavior separate from the desktop tabletop layout. */
+.mobile-bot-last-action,
+.mobile-unit-actions {
+  display: none;
+}
+
+@media (max-width: 760px), (hover: none) and (pointer: coarse) {
+  .integrated-header {
+    grid-template-columns: minmax(0, 1fr) auto !important;
+    align-items: start !important;
+  }
+
+  .integrated-header .header-center {
+    grid-column: 1;
+    min-width: 0;
+    display: grid !important;
+    gap: 5px !important;
+  }
+
+  .integrated-header .topbar-actions {
+    grid-column: 2;
+    grid-row: 1;
+    align-self: start;
+  }
+
+  .integrated-header .utility-toolbar {
+    display: flex !important;
+    min-width: 0;
+    gap: 4px;
+    overflow-x: auto;
+    padding-bottom: 1px;
+    scrollbar-width: none;
+  }
+
+  .integrated-header .utility-toolbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .integrated-header .utility-toggle {
+    flex: 0 0 auto;
+    min-height: 30px;
+    padding: 5px 8px !important;
+    border-radius: 999px;
+    font-size: 8px !important;
+    white-space: nowrap;
+  }
+
+  .mobile-bot-last-action {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 7px;
+    align-items: center;
+    min-width: 0;
+    padding: 6px 8px;
+    border: 1px solid rgba(149, 76, 84, .18);
+    border-left: 3px solid var(--bot);
+    border-radius: 9px;
+    background: linear-gradient(90deg, rgba(149, 76, 84, .12), rgba(255, 255, 255, .34));
+  }
+
+  .mobile-bot-last-action > span {
+    color: #8d4650;
+    font-size: 7px;
+    font-weight: 950;
+    letter-spacing: .07em;
+    white-space: nowrap;
+  }
+
+  .mobile-bot-last-action > strong {
+    min-width: 0;
+    color: #44352a;
+    font-size: 9px;
+    line-height: 1.25;
+    white-space: normal;
+    word-break: keep-all;
+  }
+
+  .interaction-hud.compact-hud {
+    grid-template-columns: minmax(0, 1fr) auto !important;
+  }
+
+  .mobile-unit-actions {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    padding-top: 6px;
+    border-top: 1px solid rgba(101, 76, 45, .14);
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .mobile-unit-actions::-webkit-scrollbar {
+    display: none;
+  }
+
+  .mobile-unit-actions-label {
+    flex: 0 0 auto;
+    padding-right: 2px;
+    color: #6f5b43;
+    font-size: 8px;
+    font-weight: 900;
+    letter-spacing: .05em;
+    white-space: nowrap;
+  }
+
+  .mobile-unit-action {
+    flex: 1 0 72px;
+    min-height: 36px;
+    border: 1px solid rgba(255, 244, 217, .28);
+    border-radius: 10px;
+    padding: 7px 10px;
+    color: #fff8e8;
+    background: #3b3025;
+    box-shadow: 0 3px 8px rgba(39, 27, 17, .15);
+    font-size: 10px;
+    font-weight: 900;
+    line-height: 1;
+    touch-action: manipulation;
+  }
+
+  .mobile-unit-action.bolster { background: #365d33; }
+  .mobile-unit-action.tactic { background: #5c3f73; }
+  .mobile-unit-action.control { background: #7b5b1d; }
+
+  /* Treat the unit explanation as a touch modal without changing desktop hover behavior. */
+  .unit-tooltip.visible:not([hidden]) {
+    left: 50% !important;
+    top: 50% !important;
+    right: auto !important;
+    bottom: auto !important;
+    transform: translate(-50%, -50%) !important;
+    z-index: 3000 !important;
+    width: min(420px, calc(100vw - 20px)) !important;
+    max-height: calc(100dvh - 20px) !important;
+    overflow-y: auto !important;
+    overscroll-behavior: contain;
+    pointer-events: auto !important;
+    touch-action: pan-y;
+    box-shadow:
+      0 0 0 100vmax rgba(17, 12, 8, .62),
+      0 24px 56px rgba(0, 0, 0, .32) !important;
+  }
+}
