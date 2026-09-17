@@ -25,13 +25,30 @@ function closeUnitTooltip(): void {
   tooltip.hidden = true;
 }
 
-function onPointerDownCapture(): void {
+function isGameplayActionTarget(target: EventTarget | null): boolean {
+  return target instanceof Element && Boolean(target.closest('[data-board-key], [data-proxy-board-key]'));
+}
+
+function onPointerDownCapture(event: PointerEvent): void {
   if (!isMobileUi()) return;
   tooltipVisibleAtPointerDown = Boolean(visibleUnitTooltip());
+
+  // Setup cards intentionally consume the next tap when their Unit tooltip is open,
+  // but battlefield taps must always reach the board interaction handler. Otherwise
+  // a synthetic hover/touch tooltip can swallow the Unit tap before Bolster/Tactic
+  // choices are rendered.
+  if (isGameplayActionTarget(event.target) && tooltipVisibleAtPointerDown) closeUnitTooltip();
 }
 
 function onClickCapture(event: MouseEvent): void {
   if (!isMobileUi()) return;
+
+  if (isGameplayActionTarget(event.target)) {
+    tooltipVisibleAtPointerDown = false;
+    closeUnitTooltip();
+    return;
+  }
+
   const shouldDismissTooltip = tooltipVisibleAtPointerDown && Boolean(visibleUnitTooltip());
   tooltipVisibleAtPointerDown = false;
   if (!shouldDismissTooltip) return;
