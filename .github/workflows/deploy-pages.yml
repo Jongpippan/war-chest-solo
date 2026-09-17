@@ -29,6 +29,17 @@ jobs:
         with:
           ref: main
 
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install --no-package-lock
+
+      - name: Build latest TypeScript
+        run: npm run build
+
       - name: Prepare static site
         run: |
           rm -rf _site
