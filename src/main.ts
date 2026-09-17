@@ -138,60 +138,60 @@ type RuleSection = { kind: RuleKind; title: string; text: string };
 
 const UNIT_CARD_RULES: Record<UnitType, RuleSection[]> = {
   ARCHER: [
-    { kind: 'TACTIC', title: '전술', text: '정확히 2칸 떨어진 적 유닛을 공격한다. 사이 칸에 유닛이 있어도 된다.' },
-    { kind: 'RESTRICTION', title: '제한', text: '궁수는 일반 공격을 할 수 없고 이 전술로만 공격한다.' },
+    { kind: 'TACTIC', title: 'Tactic', text: '정확히 2칸 떨어진 적 유닛을 Attack한다. 사이 칸에 유닛이 있어도 된다.' },
+    { kind: 'RESTRICTION', title: '제한', text: '궁수는 일반 Attack을 할 수 없고 이 Tactic로만 Attack한다.' },
   ],
   BERSERKER: [
-    { kind: 'ATTRIBUTE', title: '속성', text: '기동 후 자신의 스택에서 코인 1개를 제거하면 즉시 같은 유닛으로 추가 기동 1회를 할 수 있다.' },
+    { kind: 'ATTRIBUTE', title: '속성', text: 'Maneuver 후 자신의 스택에서 코인 1개를 제거하면 즉시 같은 유닛으로 추가 Maneuver 1회를 할 수 있다.' },
     { kind: 'RESTRICTION', title: '제한', text: '스택의 마지막 코인은 이 효과로 제거할 수 없다.' },
   ],
   CAVALRY: [
-    { kind: 'TACTIC', title: '전술', text: '1칸 이동한 뒤, 새 위치에서 인접한 적을 공격한다.' },
+    { kind: 'TACTIC', title: 'Tactic', text: '1칸 Move한 뒤, 새 위치에서 인접한 적을 Attack한다.' },
   ],
   CROSSBOWMAN: [
-    { kind: 'TACTIC', title: '전술', text: '직선으로 정확히 2칸 떨어진 적을 공격한다. 사이 칸은 비어 있어야 한다.' },
-    { kind: 'ATTRIBUTE', title: '일반 공격', text: '인접한 적에 대한 일반 공격도 가능하다.' },
+    { kind: 'TACTIC', title: 'Tactic', text: '직선으로 정확히 2칸 떨어진 적을 Attack한다. 사이 칸은 비어 있어야 한다.' },
+    { kind: 'ATTRIBUTE', title: '일반 Attack', text: '인접한 적에 대한 일반 Attack도 가능하다.' },
   ],
   ENSIGN: [
-    { kind: 'TACTIC', title: '전술', text: '기수로부터 2칸 이내의 다른 아군 1개가 일반 이동 1회를 한다.' },
-    { kind: 'RESTRICTION', title: '제한', text: '이동 후에도 그 아군은 기수로부터 2칸 이내에 있어야 한다.' },
+    { kind: 'TACTIC', title: 'Tactic', text: '기수로부터 2칸 이내의 다른 아군 1개가 일반 Move 1회를 한다.' },
+    { kind: 'RESTRICTION', title: '제한', text: 'Move 후에도 그 아군은 기수로부터 2칸 이내에 있어야 한다.' },
   ],
   FOOTMAN: [
-    { kind: 'TACTIC', title: '전술', text: '보드 위의 각 보병 유닛이 각각 기동 1회를 한다. 두 보병은 서로 다른 종류의 기동을 해도 된다.' },
-    { kind: 'ATTRIBUTE', title: '속성', text: '같은 보병 유닛을 최대 2개까지 동시에 배치할 수 있다.' },
+    { kind: 'TACTIC', title: 'Tactic', text: '보드 위의 각 보병 유닛이 각각 Maneuver 1회를 한다. 두 보병은 서로 다른 종류의 Maneuver을 해도 된다.' },
+    { kind: 'ATTRIBUTE', title: '속성', text: '같은 보병 유닛을 최대 2개까지 동시에 Deploy할 수 있다.' },
   ],
   KNIGHT: [
-    { kind: 'ATTRIBUTE', title: '속성', text: '강화된 적 유닛, 즉 스택이 2개 이상인 유닛에게만 공격받을 수 있다.' },
+    { kind: 'ATTRIBUTE', title: '속성', text: 'Bolster된 적 유닛, 즉 스택이 2개 이상인 유닛에게만 Attack받을 수 있다.' },
   ],
   LANCER: [
-    { kind: 'TACTIC', title: '전술', text: '직선으로 1~2칸 이동한 뒤 같은 직선 방향의 인접한 적을 공격한다. 전술을 쓸 때 합법적인 공격 대상이 반드시 있어야 한다.' },
-    { kind: 'RESTRICTION', title: '제한', text: '창기병은 일반 공격을 할 수 없다.' },
+    { kind: 'TACTIC', title: 'Tactic', text: '직선으로 1~2칸 Move한 뒤 같은 직선 방향의 인접한 적을 Attack한다. Tactic을 쓸 때 합법적인 Attack 대상이 반드시 있어야 한다.' },
+    { kind: 'RESTRICTION', title: '제한', text: '창기병은 일반 Attack을 할 수 없다.' },
   ],
   LIGHT_CAVALRY: [
-    { kind: 'TACTIC', title: '전술', text: '한 번의 전술로 2칸 이동한다.' },
-    { kind: 'ATTRIBUTE', title: '일반 이동', text: '평소에는 다른 유닛처럼 일반 1칸 이동도 가능하다.' },
+    { kind: 'TACTIC', title: 'Tactic', text: '한 번의 Tactic로 2칸 Move한다.' },
+    { kind: 'ATTRIBUTE', title: '일반 Move', text: '평소에는 다른 유닛처럼 일반 1칸 Move도 가능하다.' },
   ],
   MARSHALL: [
-    { kind: 'TACTIC', title: '전술', text: '지휘관으로부터 2칸 이내의 아군 1개가 일반 공격 1회를 한다.' },
-    { kind: 'RESTRICTION', title: '제한', text: '전술 공격을 대신 실행시키는 것이 아니므로 궁수나 창기병처럼 일반 공격을 못 하는 유닛에는 사용할 수 없다.' },
+    { kind: 'TACTIC', title: 'Tactic', text: '지휘관으로부터 2칸 이내의 아군 1개가 일반 Attack 1회를 한다.' },
+    { kind: 'RESTRICTION', title: '제한', text: 'Tactic Attack을 대신 실행시키는 것이 아니므로 궁수나 창기병처럼 일반 Attack을 못 하는 유닛에는 사용할 수 없다.' },
   ],
   MERCENARY: [
-    { kind: 'ATTRIBUTE', title: '속성', text: '용병 코인을 Recruit한 직후 보드에 용병이 있다면 그 용병이 무료 기동 1회를 할 수 있다.' },
-    { kind: 'NOTE', title: '참고', text: '무료 기동은 Deploy나 Recruit 같은 다른 종류의 행동으로 바꿀 수 없다.' },
+    { kind: 'ATTRIBUTE', title: '속성', text: '용병 코인을 Recruit한 직후 보드에 용병이 있다면 그 용병이 무료 Maneuver 1회를 할 수 있다.' },
+    { kind: 'NOTE', title: '참고', text: '무료 Maneuver은 Deploy나 Recruit 같은 다른 종류의 행동으로 바꿀 수 없다.' },
   ],
   PIKEMAN: [
-    { kind: 'ATTRIBUTE', title: '속성', text: '인접 유닛에게 공격받으면 공격자 스택에서도 코인 1개를 동시에 제거한다.' },
-    { kind: 'NOTE', title: '참고', text: '이 효과는 공격과 동시에 발생하며 공격이 아니다. 따라서 공격 중인 Knight에도 적용된다.' },
+    { kind: 'ATTRIBUTE', title: '속성', text: '인접 유닛에게 Attack받으면 Attack자 스택에서도 코인 1개를 동시에 제거한다.' },
+    { kind: 'NOTE', title: '참고', text: '이 효과는 Attack과 동시에 발생하며 Attack이 아니다. 따라서 Attack 중인 Knight에도 적용된다.' },
   ],
   ROYAL_GUARD: [
-    { kind: 'TACTIC', title: '전술', text: 'Royal Coin을 버리고, 자신이 지배하는 Location에 도착하도록 최대 2칸 이동한다.' },
-    { kind: 'ATTRIBUTE', title: '속성', text: '공격받을 때 보드 코인 대신 Supply의 근위병 코인 1개를 제거할 수 있다.' },
+    { kind: 'TACTIC', title: 'Tactic', text: 'Royal Coin을 버리고, 자신이 지배하는 Location에 도착하도록 최대 2칸 Move한다.' },
+    { kind: 'ATTRIBUTE', title: '속성', text: 'Attack받을 때 보드 코인 대신 Supply의 근위병 코인 1개를 제거할 수 있다.' },
   ],
   SCOUT: [
-    { kind: 'ATTRIBUTE', title: '속성', text: '일반 배치 지점뿐 아니라 아군 유닛과 인접한 빈 칸에도 배치할 수 있다.' },
+    { kind: 'ATTRIBUTE', title: '속성', text: '일반 Deploy 지점뿐 아니라 아군 유닛과 인접한 빈 칸에도 Deploy할 수 있다.' },
   ],
   SWORDSMAN: [
-    { kind: 'ATTRIBUTE', title: '속성', text: '공격을 해결한 뒤 선택적으로 일반 이동 1회를 할 수 있다.' },
+    { kind: 'ATTRIBUTE', title: '속성', text: 'Attack을 해결한 뒤 선택적으로 일반 Move 1회를 할 수 있다.' },
   ],
   WARRIOR_PRIEST: [
     { kind: 'ATTRIBUTE', title: '속성', text: 'Attack 또는 Control 후 Bag에서 코인 1개를 뽑고 그 코인으로 즉시 행동한다.' },
@@ -934,17 +934,17 @@ function handleBoardKey(key: string, actions: ActionCandidate[]): void {
 function renderInteractionHud(actions: ActionCandidate[]): string {
   if (!state) return '';
   if (state.winner) return `<div class="interaction-hud game-over-hud">GAME OVER</div>`;
-  if (state.activePlayer !== 'human') return `<div class="interaction-hud bot-turn-hud"><strong>BOT TURN</strong><span>Public zones remain visible while the bot resolves its Coin.</span></div>`;
+  if (state.activePlayer !== 'human') return `<div class="interaction-hud bot-turn-hud"><strong>BOT TURN</strong><span>Watch <b>BOT LAST MOVE</b> in the header when the action resolves.</span></div>`;
   const coin = selectedHumanCoin();
   const info = coin ? infoForCoin(coin) : null;
   const skip = actions.find((a) => a.kind === 'SKIP_ABILITY');
   const stepCopy = boardPath.length
-    ? 'Continue on the highlighted Unit or hex. Small badges beside the selected Unit resolve special actions.'
-    : 'Choose a Coin, then interact directly with highlighted Units and hexes on the Battlefield.';
-  return `<div class="interaction-hud">
-    <div class="selected-coin-hud">${coin && info ? `<span class="table-coin front static" style="--coin-accent:${info.accent}" data-unit-type="${coin}"><span class="table-coin-inner">${unitIconSvg(coin)}</span></span><div><small>SELECTED COIN</small><strong>${esc(coinLabel(coin))}</strong></div>` : '<div><small>SELECTED COIN</small><strong>None</strong></div>'}</div>
+    ? 'Continue by choosing the highlighted Unit or hex.'
+    : 'Select a Coin, then use highlighted Units, Locations and hexes directly.';
+  return `<div class="interaction-hud compact-hud">
+    <div class="selected-coin-hud">${coin && info ? `<span class="table-coin front static" style="--coin-accent:${info.accent}" data-unit-type="${coin}"><span class="table-coin-inner">${unitIconSvg(coin)}</span></span><div><small>SELECTED COIN</small><strong>${esc(coinLabel(coin))}</strong></div>` : '<div><small>SELECTED COIN</small><strong>NONE</strong></div>'}</div>
     <div class="interaction-copy"><strong>Battlefield input</strong><span>${stepCopy}</span><div class="interaction-legend">${gameTerm('Deploy')} · ${gameTerm('Maneuver')} · ${gameTerm('Bolster')} · ${gameTerm('Tactic')} · ${gameTerm('Control')}</div></div>
-    <div class="face-down-guide"><small>FACE-DOWN</small><span>Supply → ${gameTerm('Recruit')}</span><span>Initiative marker → ${gameTerm('Claim Initiative')}</span><span>Discard → ${gameTerm('Pass')}</span></div>
+    <div class="face-down-guide"><span>Supply → ${gameTerm('Recruit')}</span><span>Initiative → ${gameTerm('Claim Initiative')}</span><span>Discard → ${gameTerm('Pass')}</span></div>
     <div class="interaction-hud-actions">${boardPath.length ? '<button type="button" id="cancelBoardPath" class="micro-action">Cancel</button>' : ''}${skip ? '<button type="button" id="skipAbilityBtn" class="micro-action">Skip Ability</button>' : ''}</div>
   </div>`;
 }
@@ -969,7 +969,7 @@ function hexPoints(cx: number, cy: number, size = 34): string {
 
 function inactiveCluster(cx: number, cy: number, size = 28): string {
   const offsets = [
-    [0, 0], [1, 0], [0, 1], [-1, 1], [-1, 0], [0, -1], [1, -1],
+    [0, 0], [0, -1], [0, 1], [-1, 0], [1, 0],
   ];
   const pts = offsets.map(([q, r]) => {
     const x = cx + size * 1.5 * q;
@@ -1000,8 +1000,14 @@ function renderBoardSvg(actions: ActionCandidate[] = []): string {
           ? '#ead9a9'
           : '#e9d8b3';
     const locationColor = controller === 'human' ? '#277c80' : controller === 'bot' ? '#a34c58' : '#b68a2a';
+    const locationTone = controller === 'human' ? '#236f78' : controller === 'bot' ? '#9d434f' : '#86a55f';
     const locationMark = isLocation
-      ? `<g class="location-emblem ${controller ?? 'neutral'}"><polygon points="${hexPoints(x, y, 27)}" fill="rgba(255,250,232,.72)" stroke="${locationColor}" stroke-width="3.6"/><circle cx="${x}" cy="${y}" r="14" fill="rgba(255,248,219,.95)" stroke="${locationColor}" stroke-width="2.6"/><path d="M ${x - 8} ${y} C ${x - 4} ${y - 8}, ${x + 4} ${y - 8}, ${x + 8} ${y} C ${x + 4} ${y + 8}, ${x - 4} ${y + 8}, ${x - 8} ${y} Z" fill="none" stroke="${locationColor}" stroke-width="2"/><circle cx="${x}" cy="${y}" r="3.2" fill="${locationColor}"/></g>`
+      ? `<g class="location-emblem ${controller ? 'controlled' : 'neutral'} ${controller ?? ''}">
+          <circle cx="${x}" cy="${y}" r="25" fill="rgba(255,252,239,.92)" stroke="${locationTone}" stroke-width="4.5"/>
+          <circle cx="${x}" cy="${y}" r="18" fill="${locationTone}" opacity="${controller ? '.22' : '.13'}"/>
+          <path d="M ${x-10} ${y} C ${x-6} ${y-9}, ${x+6} ${y-9}, ${x+10} ${y} C ${x+6} ${y+9}, ${x-6} ${y+9}, ${x-10} ${y} Z" fill="none" stroke="${locationTone}" stroke-width="2.4"/>
+          ${controller ? `<circle cx="${x}" cy="${y}" r="6.5" fill="${locationTone}"/><circle cx="${x}" cy="${y}" r="2.2" fill="#fff8e8"/>` : ''}
+        </g>`
       : '';
 
     let unitMark = '';
@@ -1013,11 +1019,11 @@ function renderBoardSvg(actions: ActionCandidate[] = []): string {
       const unitCls = boardTargetClass(unitKey, ui);
       const unitAttr = ui.nextKeys.has(unitKey) ? ` data-board-key="${unitKey}" role="button"` : '';
       unitMark = `<g class="token unit-token ${unitCls}"${unitAttr} data-unit-type="${unit.type}" data-owner-label="${unit.owner === 'human' ? 'Your Unit' : 'Bot Unit'}" data-stack="${unit.strength}" data-location="${coordinateLabel(id)}">
-        <circle cx="${x}" cy="${y + 3}" r="31" fill="rgba(0,0,0,.2)"/>
-        <circle cx="${x}" cy="${y}" r="30" fill="${ownerFill}" stroke="#f4e7c3" stroke-width="2.8"/>
-        <circle cx="${x}" cy="${y}" r="24.5" fill="${d.accent}" stroke="rgba(255,255,255,.58)" stroke-width="1.7"/>
-        ${tokenIconMarkup(unit.type, x, y, 26)}
-        ${unit.strength > 1 ? `<g class="stack-badge"><circle cx="${x + 22}" cy="${y - 21}" r="12" fill="#fff5db" stroke="#453722" stroke-width="1.8"/><text x="${x + 22}" y="${y - 17}" text-anchor="middle" class="stack-count">${unit.strength}</text></g>` : ''}
+        <circle cx="${x}" cy="${y + 3}" r="34" fill="rgba(0,0,0,.2)"/>
+        <circle cx="${x}" cy="${y}" r="33" fill="${ownerFill}" stroke="#f4e7c3" stroke-width="2.8"/>
+        <circle cx="${x}" cy="${y}" r="27" fill="${d.accent}" stroke="rgba(255,255,255,.58)" stroke-width="1.7"/>
+        ${tokenIconMarkup(unit.type, x, y, 29)}
+        ${unit.strength > 1 ? `<g class="stack-badge"><circle cx="${x + 24}" cy="${y - 23}" r="12.5" fill="#fff5db" stroke="#453722" stroke-width="1.8"/><text x="${x + 24}" y="${y - 19}" text-anchor="middle" class="stack-count">${unit.strength}</text></g>` : ''}
       </g>`;
       if (ui.selectedKeys.has(unitKey)) {
         const specials = [
@@ -1177,6 +1183,21 @@ function renderHeaderControls(actions: ActionCandidate[] = []): string {
 function renderBotLastAction(): string {
   if (!lastBotThought) return '<div class="bot-last-action idle"><span>BOT LAST ACTION</span><strong>Waiting for the bot to act</strong></div>';
   return `<div class="bot-last-action"><span>BOT LAST ACTION · ROUND ${lastBotThought.round}</span><strong>${formatGameText(lastBotThought.label)}</strong><small>${formatGameText(lastBotThought.reason)}</small></div>`;
+}
+
+function renderGameHeader(): string {
+  if (!state) return '';
+  const active = state.activePlayer === 'human' ? 'YOUR TURN' : 'BOT TURN';
+  const initiative = state.initiative === 'human' ? 'YOU' : 'BOT';
+  const last = lastBotThought
+    ? `<div class="bot-last-move"><span>BOT LAST MOVE</span><strong>${formatGameText(lastBotThought.label)}</strong><small>${formatGameText(lastBotThought.reason)}</small></div>`
+    : `<div class="bot-last-move muted"><span>BOT LAST MOVE</span><strong>Waiting for first move</strong></div>`;
+  return `<header class="topbar compact game-header">
+    <div class="brand-block"><div class="eyebrow">WAR CHEST · SOLO</div><h1>War Chest Solo</h1></div>
+    <div class="header-state"><span><b>ROUND ${state.round}</b></span><span class="turn-pill ${state.activePlayer}">${active}</span><button type="button" class="initiative-button ${state.initiative === 'human' ? 'owned' : ''}" id="initiativeAction"><small>INITIATIVE</small><b>${initiative}</b></button><span class="difficulty-chip">BOT ${difficultyLabel(difficulty).toUpperCase()}</span></div>
+    ${last}
+    <div class="header-tools"><div class="utility-toolbar"><button type="button" class="utility-toggle ${utilityPanel === 'analysis' ? 'active' : ''}" data-utility="analysis">Analysis</button><button type="button" class="utility-toggle ${utilityPanel === 'bot' ? 'active' : ''}" data-utility="bot">Bot</button><button type="button" class="utility-toggle ${utilityPanel === 'log' ? 'active' : ''}" data-utility="log">Log</button></div><button id="undoBtn" class="ghost" ${undoStack.length && !botBusy ? '' : 'disabled'}>↶ Undo</button><button id="rulesBtn" class="ghost">Rules</button><button id="restartBtn" class="ghost danger">Restart</button></div>
+  </header>`;
 }
 
 function renderUtilityDrawer(): string {

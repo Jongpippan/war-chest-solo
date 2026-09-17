@@ -47,18 +47,18 @@ export function stepInDirection(start, directionIndex, steps) {
     const r = c.r + d.r * steps;
     return isOnBoard(q, r) ? hexId(q, r) : null;
 }
-// Two-player layout matched to the physical base-game board.
-// The 37 light central hexes are active; the dark outer side clusters are not used in 2-player.
-// Coordinates are axial and rendered flat-top in main.ts.
-export const HUMAN_STARTS = [hexId(-2, 3), hexId(1, 2)];
-export const BOT_STARTS = [hexId(-1, -2), hexId(2, -3)];
+// Two-player base-game layout. The playable area is the 37 light central hexes.
+// The five darker hexes on each far side are four-player-only and are not part of BOARD_HEXES.
+// Axial coordinates are oriented with BOT at the top and HUMAN at the bottom, matching the official 2-player setup diagram.
+export const BOT_STARTS = [hexId(0, -2), hexId(2, -2)];
+export const HUMAN_STARTS = [hexId(-2, 2), hexId(0, 2)];
 export const NEUTRAL_LOCATIONS = [
-    hexId(-2, 0),
-    hexId(2, 0),
+    hexId(-1, -1),
     hexId(1, -1),
+    hexId(3, -1),
+    hexId(-3, 1),
     hexId(-1, 1),
-    hexId(3, -2),
-    hexId(-3, 2),
+    hexId(1, 1),
 ];
 export const ALL_LOCATIONS = [...HUMAN_STARTS, ...BOT_STARTS, ...NEUTRAL_LOCATIONS];
 export function initialLocations() {

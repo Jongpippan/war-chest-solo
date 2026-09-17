@@ -111,3 +111,15 @@ test('2-player physical starting and neutral Locations match the base board', ()
     hexId(-3, 1), hexId(-1, 1), hexId(1, 1),
   ]));
 });
+
+
+test('deploy destinations are controlled locations', () => {
+  const state = createGame(['SWORDSMAN','PIKEMAN','CROSSBOWMAN','LIGHT_CAVALRY'], ['ARCHER','CAVALRY','LANCER','SCOUT'], 'human');
+  const idx = state.players.human.hand.findIndex((c) => c !== 'ROYAL');
+  if (idx < 0) return;
+  const coin = state.players.human.hand[idx];
+  const actions = generateActionsForCoin(state, 'human', coin, 'HAND', idx).filter((a) => a.kind === 'DEPLOY');
+  for (const action of actions) {
+    assert.equal(state.locations[action.payload.destination], 'human');
+  }
+});
