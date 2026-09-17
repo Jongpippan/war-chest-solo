@@ -1,8 +1,17 @@
-# War Chest Solo Local — v0.2
+# War Chest Solo Local — v0.3
 
 War Chest 기본판의 핵심 규칙을 바탕으로 만든 **비공식 개인용 로컬 1인 웹게임**입니다. 원작 카드 이미지나 아트 자산은 포함하지 않고, 텍스트와 자체 도형 UI만 사용합니다.
 
 ## 이번 버전의 주요 기능
+
+
+## v0.3 UI/UX redesign highlights
+
+- Unit visuals changed from initials to **per-unit icons + colors**
+- Battlefield redrawn with a layout that more closely resembles the official 2-player board silhouette
+- Full-screen desktop layout: left = player summaries, center = battlefield, right = action / bot explain / log
+- Hover tooltip for unit rules on unit cards, hand coins, and board tokens
+- Stronger token depth, cleaner typography, and denser no-scroll desktop layout
 
 - Human vs 로컬 규칙 기반 Bot
 - 기본판 16종 유닛 및 주요 특수 능력 구현
@@ -89,6 +98,23 @@ Human 1 → Bot 2 → Human 2 → Bot 2 → Human 1
 ```
 
 현재 구현에서는 Human이 첫 드래프터이므로 두 번째 드래프터인 Bot이 게임 시작 Initiative를 갖습니다.
+
+## GitHub에 올리기
+
+GitHub CLI가 로그인되어 있다면:
+
+```bash
+./PUBLISH_TO_GITHUB.sh
+```
+
+또는 직접:
+
+```bash
+git init
+git add .
+git commit -m "feat: build War Chest solo v0.2"
+gh repo create war-chest-solo --private --source=. --remote=origin --push
+```
 
 ## 주의
 
