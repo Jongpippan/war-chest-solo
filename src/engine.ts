@@ -27,6 +27,34 @@ import type {
 let unitSequence = 1;
 let actionSequence = 1;
 
+// Candidates are snapshots of one exact game state. A render can expose several
+// alternatives (for example Bolster and Move) for the same coin, but resolving
+// one alternative must invalidate every sibling candidate from that snapshot.
+// Keeping the version outside GameState preserves save-file compatibility.
+const stateActionVersions = new WeakMap<GameState, number>();
+const candidateActionVersions = new WeakMap<ActionCandidate, number>();
+
+function actionVersion(state: GameState): number {
+  return stateActionVersions.get(state) ?? 0;
+}
+
+function stampActions(state: GameState, actions: ActionCandidate[]): ActionCandidate[] {
+  const version = actionVersion(state);
+  for (const action of actions) candidateActionVersions.set(action, version);
+  return actions;
+}
+
+function assertCandidateIsCurrent(state: GameState, action: ActionCandidate): void {
+  const generatedAt = candidateActionVersions.get(action);
+  if (generatedAt !== undefined && generatedAt !== actionVersion(state)) {
+    throw new Error('Action is stale: another action has already resolved.');
+  }
+}
+
+function finishAction(state: GameState): void {
+  stateActionVersions.set(state, actionVersion(state) + 1);
+}
+
 export function normalizeUnitIds(state: GameState): void {
   const seen = new Set<string>();
   let next = 1;
@@ -102,13 +130,16 @@ export function createGame(humanUnits: UnitType[], botUnits: UnitType[], initiat
     log: [],
     seedLabel: new Date().toISOString(),
   };
+  stateActionVersions.set(state, 0);
   addLog(state, `게임 시작. ${starter === 'human' ? '당신' : '봇'}이 Initiative를 가집니다.`);
   drawRoundHands(state);
   return state;
 }
 
 export function cloneState(state: GameState): GameState {
-  return structuredClone(state);
+  const clone = structuredClone(state);
+  stateActionVersions.set(clone, actionVersion(state));
+  return clone;
 }
 
 export function addLog(state: GameState, text: string): void {
@@ -159,17 +190,23 @@ function discardCoin(state: GameState, playerId: PlayerId, coin: Coin, faceUp: b
   state.players[playerId].discard.push({ coin, faceUp });
 }
 
-function consumeCandidateCoin(state: GameState, candidate: ActionCandidate, destination: 'DISCARD_UP' | 'DISCARD_DOWN' | 'BOARD' | 'NONE'): Coin | null {
+function consumeCandidateCoin(
+  state: GameState,
+  candidate: ActionCandidate,
+  destination: 'DISCARD_UP' | 'DISCARD_DOWN' | 'BOARD' | 'NONE',
+): Coin | null {
   if (candidate.source === 'FREE') return null;
   let coin: Coin | undefined;
   if (candidate.source === 'FORCED') {
     if (!state.forcedCoin || state.forcedCoin.player !== candidate.player) throw new Error('No forced coin available.');
     coin = state.forcedCoin.coin;
+    if (candidate.coin !== undefined && candidate.coin !== coin) throw new Error('Forced coin changed before action resolved.');
     state.forcedCoin = null;
   } else {
     if (candidate.coinIndex === undefined) throw new Error('Missing hand coin index.');
     coin = state.players[candidate.player].hand[candidate.coinIndex];
     if (coin === undefined) throw new Error('Hand coin no longer exists.');
+    if (candidate.coin !== undefined && candidate.coin !== coin) throw new Error('Selected hand coin changed before action resolved.');
     state.players[candidate.player].hand.splice(candidate.coinIndex, 1);
   }
   if (destination === 'DISCARD_UP') discardCoin(state, candidate.player, coin, true);
@@ -313,7 +350,8 @@ function tacticCandidates(
 
   if (type === 'ENSIGN') {
     for (const ensign of matching) {
-      for (const friendly of unitsOf(state, playerId).filter((u) => distance(ensign.hex, u.hex) <= 2)) {
+      // Ensign grants a normal Move to another friendly Unit, never itself.
+      for (const friendly of unitsOf(state, playerId).filter((u) => u.id !== ensign.id && distance(ensign.hex, u.hex) <= 2)) {
         for (const dest of normalMoveDestinations(state, friendly).filter((h) => distance(ensign.hex, h) <= 2)) {
           out.push(candidate(playerId, source, 'TACTIC_ENSIGN', `${UNIT_DEFS[friendly.type].ko} 이동 → ${coordinateLabel(dest)}`, '전술', { unitId: ensign.id, grantedUnitId: friendly.id, destination: dest }, [ensign.hex, friendly.hex, dest], coin, coinIndex));
         }
@@ -413,7 +451,7 @@ export function generateActionsForCoin(
 
   if (coin === 'ROYAL') {
     out.push(...royalGuardTacticCandidates(state, playerId, source, coinIndex));
-    return out;
+    return stampActions(state, out);
   }
 
   const type = coin;
@@ -441,7 +479,7 @@ export function generateActionsForCoin(
   }
 
   out.push(...tacticCandidates(state, playerId, type, source, coin, coinIndex));
-  return out;
+  return stampActions(state, out);
 }
 
 export function generateAllMainActions(state: GameState, playerId: PlayerId): ActionCandidate[] {
@@ -473,27 +511,35 @@ export function generatePendingActions(state: GameState): ActionCandidate[] {
     ? getUnit(state, pending.unitIds[pending.index] ?? '')
     : getUnit(state, pending.unitId);
 
+  let out: ActionCandidate[] = [];
   if (pending.kind === 'SWORDSMAN_MOVE') {
-    if (!unit) return [candidate(pending.player, 'FREE', 'SKIP_ABILITY', '검병 후속 이동 건너뛰기', '특수 능력', {})];
-    const out = normalMoveDestinations(state, unit).map((dest) => candidate(pending.player, 'FREE', 'FREE_MOVE', `검병 후속 이동 → ${coordinateLabel(dest)}`, '특수 능력', { unitId: unit.id, destination: dest }, [unit.hex, dest]));
-    out.push(candidate(pending.player, 'FREE', 'SKIP_ABILITY', '검병 후속 이동 안 함', '특수 능력', { unitId: unit.id }, [unit.hex]));
-    return out;
+    if (!unit) out = [candidate(pending.player, 'FREE', 'SKIP_ABILITY', '검병 후속 이동 건너뛰기', '특수 능력', {})];
+    else {
+      out = normalMoveDestinations(state, unit).map((dest) => candidate(pending.player, 'FREE', 'FREE_MOVE', `검병 후속 이동 → ${coordinateLabel(dest)}`, '특수 능력', { unitId: unit.id, destination: dest }, [unit.hex, dest]));
+      out.push(candidate(pending.player, 'FREE', 'SKIP_ABILITY', '검병 후속 이동 안 함', '특수 능력', { unitId: unit.id }, [unit.hex]));
+    }
+    return stampActions(state, out);
   }
 
   if (pending.kind === 'BERSERKER_EXTRA') {
-    if (!unit || unit.strength <= 1) return [candidate(pending.player, 'FREE', 'SKIP_ABILITY', '광전사 연속 기동 종료', '특수 능력', {})];
-    return freeManeuverCandidates(state, pending.player, unit, true, '코인 1개 제거 후 광전사 연속 기동');
+    out = !unit || unit.strength <= 1
+      ? [candidate(pending.player, 'FREE', 'SKIP_ABILITY', '광전사 연속 기동 종료', '특수 능력', {})]
+      : freeManeuverCandidates(state, pending.player, unit, true, '코인 1개 제거 후 광전사 연속 기동');
+    return stampActions(state, out);
   }
 
   if (pending.kind === 'MERCENARY_EXTRA') {
-    if (!unit) return [candidate(pending.player, 'FREE', 'SKIP_ABILITY', '용병 무료 기동 건너뛰기', '특수 능력', {})];
-    return freeManeuverCandidates(state, pending.player, unit, true, '용병 무료 기동');
+    out = !unit
+      ? [candidate(pending.player, 'FREE', 'SKIP_ABILITY', '용병 무료 기동 건너뛰기', '특수 능력', {})]
+      : freeManeuverCandidates(state, pending.player, unit, true, '용병 무료 기동');
+    return stampActions(state, out);
   }
 
   if (pending.kind === 'FOOTMAN_QUEUE') {
-    if (!unit) return [candidate(pending.player, 'FREE', 'SKIP_ABILITY', '이 보병은 더 이상 보드에 없음', '특수 능력', {})];
-    // Recursive Footman tactic is intentionally not offered: the granted maneuver resolves as move/attack/control.
-    return freeManeuverCandidates(state, pending.player, unit, true, `보병 ${pending.index + 1}/${pending.unitIds.length}`);
+    out = !unit
+      ? [candidate(pending.player, 'FREE', 'SKIP_ABILITY', '이 보병은 더 이상 보드에 없음', '특수 능력', {})]
+      : freeManeuverCandidates(state, pending.player, unit, true, `보병 ${pending.index + 1}/${pending.unitIds.length}`);
+    return stampActions(state, out);
   }
 
   return [];
@@ -521,7 +567,6 @@ function royalGuardAbsorbsFromSupply(state: GameState, target: BoardUnit): boole
 }
 
 function applyAttack(state: GameState, attacker: BoardUnit, target: BoardUnit, adjacentAttack: boolean): void {
-  // Capture identities before any coin removal. A destroyed target no longer exists on board afterwards.
   const attackerName = UNIT_DEFS[attacker.type].ko;
   const targetName = UNIT_DEFS[target.type].ko;
   const targetType = target.type;
@@ -543,36 +588,7 @@ function applyAttack(state: GameState, attacker: BoardUnit, target: BoardUnit, a
     }
   }
 
-  // Added last so the reverse-chronological UI presents the Attack before its damage/removal detail.
   addLog(state, `${attacker.owner === 'human' ? '당신' : '봇'}의 ${attackerName}이(가) ${targetName}을(를) Attack했습니다.`);
-}
-
-function setPostManeuverTrigger(state: GameState, playerId: PlayerId, unitId: string, maneuver: 'MOVE' | 'ATTACK' | 'CONTROL'): void {
-  const unit = getUnit(state, unitId);
-  const type = unit?.type;
-  // Warrior Priest triggers from the completed action even if Pikeman retaliation destroyed it.
-  const originalType = unit?.type;
-
-  if (maneuver === 'ATTACK') {
-    const attackerType = originalType;
-    if (attackerType === 'SWORDSMAN' && unit) {
-      state.pending = { kind: 'SWORDSMAN_MOVE', player: playerId, unitId };
-      return;
-    }
-  }
-
-  if (type === 'BERSERKER' && unit && unit.strength > 1) {
-    state.pending = { kind: 'BERSERKER_EXTRA', player: playerId, unitId };
-    return;
-  }
-
-  if ((maneuver === 'ATTACK' || maneuver === 'CONTROL') && type === 'WARRIOR_PRIEST') {
-    const drawn = drawOne(state, playerId);
-    if (drawn) {
-      state.forcedCoin = { player: playerId, coin: drawn, source: 'WARRIOR_PRIEST' };
-      addLog(state, `전투 사제가 추가 코인 1개를 뽑았습니다. 즉시 사용해야 합니다.`);
-    }
-  }
 }
 
 function setPostManeuverTriggerWithType(
@@ -617,6 +633,7 @@ function applyControl(state: GameState, playerId: PlayerId, unit: BoardUnit): vo
 }
 
 function moveUnit(state: GameState, unit: BoardUnit, destination: HexId): void {
+  if (!BOARD_HEXES.includes(destination)) throw new Error('Destination is off board.');
   if (!isEmpty(state, destination)) throw new Error('Destination occupied.');
   unit.hex = destination;
 }
@@ -650,6 +667,8 @@ function advanceFootmanPending(state: GameState): void {
 export function executeAction(state: GameState, action: ActionCandidate): void {
   if (state.winner) return;
   if (action.player !== state.activePlayer) throw new Error('Not active player.');
+  assertCandidateIsCurrent(state, action);
+
   const playerId = action.player;
   const pName = playerId === 'human' ? '당신' : '봇';
   const pendingBefore: PendingAbility | null = state.pending ? structuredClone(state.pending) : null;
@@ -658,18 +677,16 @@ export function executeAction(state: GameState, action: ActionCandidate): void {
     if (pendingBefore?.kind === 'FOOTMAN_QUEUE') advanceFootmanPending(state);
     else state.pending = null;
     addLog(state, `${pName}이(가) 특수 후속 행동을 사용하지 않았습니다.`);
+    finishAction(state);
     return;
   }
 
-  // Pending free actions consume their pending context first so a new trigger can replace it.
   if (action.source === 'FREE') {
     if (pendingBefore?.kind === 'BERSERKER_EXTRA') {
       const berserker = ensureUnit(state, pendingBefore.unitId);
       if (berserker.strength <= 1) throw new Error('Cannot remove final Berserker coin.');
       removeBoardCoin(state, berserker);
       addLog(state, `광전사가 스택 코인 1개를 제거해 연속 기동합니다.`);
-      state.pending = null;
-    } else if (pendingBefore?.kind === 'FOOTMAN_QUEUE') {
       state.pending = null;
     } else {
       state.pending = null;
@@ -698,6 +715,7 @@ export function executeAction(state: GameState, action: ActionCandidate): void {
       consumeCandidateCoin(state, action, 'BOARD');
       const type = action.payload.unitType!;
       const destination = action.payload.destination!;
+      if (!BOARD_HEXES.includes(destination) || !isEmpty(state, destination)) throw new Error('Illegal deploy destination.');
       state.boardUnits.push({ id: nextUnitId(state), owner: playerId, type, hex: destination, strength: 1 });
       addLog(state, `${pName}이(가) ${UNIT_DEFS[type].ko}을(를) ${coordinateLabel(destination)}에 배치했습니다.`);
       break;
@@ -705,6 +723,7 @@ export function executeAction(state: GameState, action: ActionCandidate): void {
     case 'BOLSTER': {
       consumeCandidateCoin(state, action, 'BOARD');
       const unit = ensureUnit(state, action.payload.unitId);
+      if (unit.owner !== playerId || unit.type !== action.coin) throw new Error('Illegal Bolster target.');
       unit.strength += 1;
       addLog(state, `${pName}의 ${UNIT_DEFS[unit.type].ko}이(가) 강화되어 스택 ${unit.strength}이 되었습니다.`);
       break;
@@ -764,7 +783,9 @@ export function executeAction(state: GameState, action: ActionCandidate): void {
     }
     case 'TACTIC_ENSIGN': {
       consumeCandidateCoin(state, action, 'DISCARD_UP');
+      const ensign = ensureUnit(state, action.payload.unitId);
       const granted = ensureUnit(state, action.payload.grantedUnitId);
+      if (ensign.id === granted.id) throw new Error('Ensign cannot grant its Tactic to itself.');
       const grantedType = granted.type;
       moveUnit(state, granted, action.payload.destination!);
       addLog(state, `기수가 ${UNIT_DEFS[granted.type].ko}에게 일반 이동을 부여했습니다.`);
@@ -815,13 +836,14 @@ export function executeAction(state: GameState, action: ActionCandidate): void {
       throw new Error(`Unsupported action: ${action.kind}`);
   }
 
-  // If a Footman free maneuver did not create a new trigger, advance to the next Footman.
   if (action.source === 'FREE' && pendingBefore?.kind === 'FOOTMAN_QUEUE' && !state.pending && !state.forcedCoin) {
     const nextIndex = pendingBefore.index + 1;
     if (nextIndex < pendingBefore.unitIds.length) {
       state.pending = { ...pendingBefore, index: nextIndex };
     }
   }
+
+  finishAction(state);
 }
 
 export function afterResolvedAction(state: GameState): void {
@@ -832,7 +854,10 @@ export function afterResolvedAction(state: GameState): void {
   const otherHas = state.players[other].hand.length > 0;
 
   if (otherHas) {
-    state.activePlayer = other;
+    if (state.activePlayer !== other) {
+      state.activePlayer = other;
+      finishAction(state);
+    }
     return;
   }
   if (currentHas) return;
@@ -842,6 +867,7 @@ export function afterResolvedAction(state: GameState): void {
     state.initiativeChangedThisRound = false;
     state.activePlayer = state.initiative;
     drawRoundHands(state);
+    finishAction(state);
   }
 }
 
@@ -862,29 +888,51 @@ export function totalKnownCoins(player: PlayerState, type: Coin): number {
 
 export function stateSanity(state: GameState): string[] {
   const issues: string[] = [];
+  const ids = new Set<string>();
+  const occupied = new Set<string>();
+
   for (const unit of state.boardUnits) {
     if (!BOARD_HEXES.includes(unit.hex)) issues.push(`Unit ${unit.id} off board`);
     if (unit.strength <= 0) issues.push(`Unit ${unit.id} has nonpositive strength`);
-  }
-  const occupied = new Set<string>();
-  for (const unit of state.boardUnits) {
+    if (ids.has(unit.id)) issues.push(`Duplicate unit id ${unit.id}`);
+    ids.add(unit.id);
     if (occupied.has(unit.hex)) issues.push(`Two units occupy ${unit.hex}`);
     occupied.add(unit.hex);
+    if (!state.players[unit.owner].units.includes(unit.type)) issues.push(`${unit.owner} has undrafted ${unit.type} on board`);
   }
+
+  if (state.pending && state.pending.player !== state.activePlayer) issues.push('Pending ability belongs to inactive player');
+  if (state.forcedCoin && state.forcedCoin.player !== state.activePlayer) issues.push('Forced coin belongs to inactive player');
+
   for (const id of ['human', 'bot'] as PlayerId[]) {
     const p = state.players[id];
     if (p.markersRemaining < 0 || p.markersRemaining > 6) issues.push(`${id} marker count invalid`);
+    const controlled = ALL_LOCATIONS.filter((hex) => state.locations[hex] === id).length;
+    if (p.markersRemaining + controlled !== 6) issues.push(`${id} marker conservation: ${p.markersRemaining}+${controlled}/6`);
+
     for (const unit of p.units) {
+      const supply = p.supply[unit] ?? 0;
+      if (supply < 0) issues.push(`${id} ${unit} supply negative`);
+      const deployed = unitsOf(state, id, unit);
+      if (deployed.length > deployedLimit(unit)) issues.push(`${id} ${unit} deployed copies ${deployed.length}/${deployedLimit(unit)}`);
       const forced = state.forcedCoin?.player === id && state.forcedCoin.coin === unit ? 1 : 0;
-      const total = (p.supply[unit] ?? 0)
+      const total = supply
         + p.bag.filter((c) => c === unit).length
         + p.hand.filter((c) => c === unit).length
         + p.discard.filter((d) => d.coin === unit).length
         + p.removed.filter((c) => c === unit).length
-        + unitsOf(state, id, unit).reduce((sum, u) => sum + u.strength, 0)
+        + deployed.reduce((sum, u) => sum + u.strength, 0)
         + forced;
       if (total !== UNIT_DEFS[unit].coinCount) issues.push(`${id} ${unit} coin conservation: ${total}/${UNIT_DEFS[unit].coinCount}`);
     }
+
+    const royalForced = state.forcedCoin?.player === id && state.forcedCoin.coin === 'ROYAL' ? 1 : 0;
+    const royalTotal = p.bag.filter((c) => c === 'ROYAL').length
+      + p.hand.filter((c) => c === 'ROYAL').length
+      + p.discard.filter((d) => d.coin === 'ROYAL').length
+      + p.removed.filter((c) => c === 'ROYAL').length
+      + royalForced;
+    if (royalTotal !== 1) issues.push(`${id} ROYAL coin conservation: ${royalTotal}/1`);
   }
   return issues;
 }
