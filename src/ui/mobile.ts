@@ -248,6 +248,20 @@ function onGeneratedActionClick(event: MouseEvent): void {
   const button = target?.closest<HTMLButtonElement>('[data-proxy-board-key]');
   if (!button) return;
 
+  // A touch device can emit more than one click-like event around a DOM
+  // replacement. Mark the visible action as consumed before forwarding it so
+  // Bolster/Tactic/Control can never be dispatched twice from the same overlay.
+  if (button.dataset.actionFired === 'true' || button.disabled) {
+    event.preventDefault();
+    event.stopPropagation();
+    return;
+  }
+  button.dataset.actionFired = 'true';
+  document.querySelectorAll<HTMLButtonElement>('.board-unit-action-button').forEach((candidate) => {
+    candidate.disabled = true;
+    candidate.setAttribute('aria-disabled', 'true');
+  });
+
   const key = button.dataset.proxyBoardKey;
   if (!key) return;
   const source = sourceActionChips().find((candidate) => candidate.dataset.boardKey === key);
