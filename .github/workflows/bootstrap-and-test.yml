@@ -16,42 +16,34 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Apply staged v0.9 board and UI patch
-        if: ${{ hashFiles('.v09/apply.py') != '' }}
-        run: |
-          python .v09/apply.py
-          if [ -f .v09/polish.py ]; then python .v09/polish.py; fi
+      - name: Apply staged v0.10 interaction fix
+        if: ${{ hashFiles('.v10/apply.py') != '' }}
+        run: python .v10/apply.py
       - name: Install dependencies
         run: npm install --no-package-lock
       - name: Run tests
         run: npm test
       - name: Run bot simulation
         run: node test/simulate.mjs
-      - name: Install Playwright for one-time visual verification
-        if: ${{ hashFiles('.v09/visual.mjs') != '' }}
+      - name: Install Playwright for Light Cavalry interaction regression
+        if: ${{ hashFiles('.v10/light-cavalry.mjs') != '' }}
         run: |
           npm install --no-save playwright@1.55.0
           npx playwright install chromium
-      - name: Visual verification at desktop viewport sizes
-        if: ${{ hashFiles('.v09/visual.mjs') != '' }}
+      - name: Verify Light Cavalry two-step battlefield interaction
+        if: ${{ hashFiles('.v10/light-cavalry.mjs') != '' }}
         run: |
           python3 -m http.server 4173 > /tmp/war-chest-http.log 2>&1 &
           SERVER_PID=$!
           trap 'kill $SERVER_PID || true' EXIT
           sleep 1
-          node .v09/visual.mjs
-      - name: Upload visual verification screenshots
-        if: ${{ hashFiles('.v09/screens') != '' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: v09-visual-verification
-          path: .v09/screens/*.png
-      - name: Commit v0.9 source and build output
-        if: ${{ hashFiles('.v09/apply.py') != '' }}
+          node .v10/light-cavalry.mjs
+      - name: Commit v0.10 source and build output
+        if: ${{ hashFiles('.v10/apply.py') != '' }}
         run: |
-          rm -rf .v09
+          rm -rf .v10
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
-          git commit -m 'feat: match physical board and fix side panel readability v0.9'
+          git commit -m 'fix: make Light Cavalry two-step Tactic clickable v0.10'
           git push
