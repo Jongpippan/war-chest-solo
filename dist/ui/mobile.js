@@ -19,7 +19,7 @@ function closeUnitTooltip() {
     tooltip.hidden = true;
 }
 function isGameplayActionTarget(target) {
-    return target instanceof Element && Boolean(target.closest('[data-board-key], [data-proxy-board-key]'));
+    return target instanceof Element && Boolean(target.closest('[data-board-key]'));
 }
 function onMouseEnterCapture(event) {
     if (!isMobileUi())
@@ -108,62 +108,23 @@ function syncBotLastAction() {
 function removeBotLastAction() {
     document.querySelector('.mobile-bot-last-action')?.remove();
 }
-function actionLabel(source) {
-    if (source.classList.contains('bolster'))
-        return '증원';
-    if (source.classList.contains('tactic'))
-        return '전술';
-    if (source.classList.contains('control'))
-        return '점령';
-    return source.textContent?.trim() || '행동';
-}
-function selectedActionSources() {
-    const popover = document.querySelector('.unit-action-popover');
-    if (!popover)
-        return [];
-    return Array.from(popover.querySelectorAll('.board-action-chip[data-board-key]'));
-}
-function syncUnitActionBar() {
-    const hud = document.querySelector('.interaction-hud');
-    const existing = document.querySelector('.context-unit-actions');
-    const sources = selectedActionSources();
-    if (!hud || !sources.length) {
-        existing?.remove();
-        return;
-    }
-    const popover = sources[0].closest('.unit-action-popover');
-    const unitId = popover?.dataset.actionFor ?? '';
-    const signature = `${unitId}:${sources.map((source) => source.dataset.boardKey ?? '').join('|')}`;
-    if (existing?.dataset.signature === signature && existing.parentElement === hud)
-        return;
-    existing?.remove();
-    const bar = document.createElement('div');
-    bar.className = 'context-unit-actions';
-    bar.setAttribute(GENERATED_ATTR, 'true');
-    bar.dataset.signature = signature;
-    bar.setAttribute('role', 'group');
-    bar.setAttribute('aria-label', '선택한 유닛 행동');
-    const label = document.createElement('span');
-    label.className = 'context-unit-actions-label';
-    label.textContent = '선택 유닛';
-    bar.append(label);
-    for (const source of sources) {
-        const key = source.dataset.boardKey;
-        if (!key)
-            continue;
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.className = `context-unit-action ${source.classList.contains('bolster') ? 'bolster' : source.classList.contains('tactic') ? 'tactic' : source.classList.contains('control') ? 'control' : ''}`;
-        button.dataset.proxyBoardKey = key;
-        button.textContent = actionLabel(source);
-        bar.append(button);
-    }
-    hud.append(bar);
+function localizeBoardActionChips() {
+    document.querySelectorAll('.unit-action-popover .board-action-chip').forEach((chip) => {
+        const label = chip.querySelector('text');
+        if (!label)
+            return;
+        if (chip.classList.contains('bolster'))
+            label.textContent = '증원';
+        else if (chip.classList.contains('tactic'))
+            label.textContent = '전술';
+        else if (chip.classList.contains('control'))
+            label.textContent = '점령';
+    });
 }
 function syncResponsiveUi() {
     syncQueued = false;
     captureBotActionToast();
-    syncUnitActionBar();
+    localizeBoardActionChips();
     if (isMobileUi())
         syncBotLastAction();
     else
@@ -175,25 +136,10 @@ function queueSync() {
     syncQueued = true;
     requestAnimationFrame(syncResponsiveUi);
 }
-function onGeneratedActionClick(event) {
-    const target = event.target;
-    const button = target?.closest('[data-proxy-board-key]');
-    if (!button)
-        return;
-    const key = button.dataset.proxyBoardKey;
-    if (!key)
-        return;
-    const source = selectedActionSources().find((candidate) => candidate.dataset.boardKey === key);
-    if (!source)
-        return;
-    event.preventDefault();
-    source.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
-}
 function startResponsiveUi() {
     document.addEventListener('mouseenter', onMouseEnterCapture, true);
     document.addEventListener('pointerdown', onPointerDownCapture, true);
     document.addEventListener('click', onClickCapture, true);
-    document.addEventListener('click', onGeneratedActionClick);
     const observer = new MutationObserver(queueSync);
     observer.observe(document.body, { childList: true, subtree: true });
     window.matchMedia(MOBILE_QUERY).addEventListener('change', queueSync);
