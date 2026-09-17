@@ -16,11 +16,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Apply staged v0.8 board and UX patch
-        if: ${{ hashFiles('.v08/apply.py') != '' }}
-        run: |
-          python .v08/apply.py
-          if [ -f .v08/polish.py ]; then python .v08/polish.py; fi
+      - name: Apply staged v0.9 board and UI patch
+        if: ${{ hashFiles('.v09/apply.py') != '' }}
+        run: python .v09/apply.py
       - name: Install dependencies
         run: npm install --no-package-lock
       - name: Run tests
@@ -28,30 +26,30 @@ jobs:
       - name: Run bot simulation
         run: node test/simulate.mjs
       - name: Install Playwright for one-time visual verification
-        if: ${{ hashFiles('.v08/visual.mjs') != '' }}
+        if: ${{ hashFiles('.v09/visual.mjs') != '' }}
         run: |
           npm install --no-save playwright@1.55.0
           npx playwright install chromium
       - name: Visual verification at desktop viewport sizes
-        if: ${{ hashFiles('.v08/visual.mjs') != '' }}
+        if: ${{ hashFiles('.v09/visual.mjs') != '' }}
         run: |
           python3 -m http.server 4173 > /tmp/war-chest-http.log 2>&1 &
           SERVER_PID=$!
           trap 'kill $SERVER_PID || true' EXIT
           sleep 1
-          node .v08/visual.mjs
+          node .v09/visual.mjs
       - name: Upload visual verification screenshots
-        if: ${{ hashFiles('.v08/screens') != '' }}
+        if: ${{ hashFiles('.v09/screens') != '' }}
         uses: actions/upload-artifact@v4
         with:
-          name: v08-visual-verification
-          path: .v08/screens/*.png
-      - name: Commit v0.8 source and build output
-        if: ${{ hashFiles('.v08/apply.py') != '' }}
+          name: v09-visual-verification
+          path: .v09/screens/*.png
+      - name: Commit v0.9 source and build output
+        if: ${{ hashFiles('.v09/apply.py') != '' }}
         run: |
-          rm -rf .v08
+          rm -rf .v09
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
-          git commit -m 'feat: accurate 2-player board and polished table UX v0.8'
+          git commit -m 'feat: match physical board and fix side panel readability v0.9'
           git push
