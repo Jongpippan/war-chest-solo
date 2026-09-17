@@ -1,0 +1,54 @@
+function renderGame(): void {
+  if (!state) return;
+  const actions = state.activePlayer === 'human' && !state.winner ? humanCandidates() : [];
+  const sanity = stateSanity(state);
+  app.innerHTML = `<main class="game-shell">
+    <header class="topbar compact"><div><div class="eyebrow">LOCAL SOLO · TABLE VIEW</div><h1>War Chest Solo</h1></div><div class="topbar-actions"><button id="undoBtn" class="ghost" ${undoStack.length && !botBusy ? '' : 'disabled'}>↶ Undo</button><button id="rulesBtn" class="ghost">룰 메모</button><button id="restartBtn" class="ghost danger">처음부터</button></div></header>
+    ${renderStatusBar()}
+    ${sanity.length ? `<div class="debug-warning">상태 검사 경고: ${esc(sanity.join(' / '))}</div>` : ''}
+    <section class="workspace-grid">
+      <aside class="left-rail player-rail">${renderPlayerPanel('human')}</aside>
+      <section class="board-stage"><div class="board-panel"><div class="board-title"><div><div class="eyebrow">BATTLEFIELD</div><h2>중앙 전장</h2></div><div class="board-legend"><span><i class="legend-dot human"></i>당신</span><span><i class="legend-dot bot"></i>봇</span><span><i class="legend-location"></i>Location</span></div></div><div id="boardHost">${renderBoardSvg()}</div></div></section>
+      <aside class="right-rail"><div class="bot-table-wrap">${renderPlayerPanel('bot')}</div><section class="action-panel">${renderActionPanel(actions)}</section></aside>
+    </section>
+    ${renderUtilityDrawer()}
+    <dialog id="rulesDialog" class="rules-dialog"><form method="dialog"><button class="dialog-close">×</button></form><div class="eyebrow">QUICK RULES</div><h2>빠른 룰 메모</h2><p>한 라운드에 각자 코인 3개를 뽑고 Initiative 보유자부터 번갈아 1개씩 사용합니다.</p><ul><li><b>배치/강화:</b> 유닛 코인을 보드에 직접 놓습니다.</li><li><b>뒷면:</b> Initiative, Recruit, Pass.</li><li><b>앞면:</b> Move, Attack, Control, Tactic.</li><li><b>승리:</b> Control Marker 6개를 모두 보드에 놓으면 즉시 승리합니다.</li><li><b>공격:</b> 맞은 스택에서 코인 1개를 게임에서 제거합니다.</li></ul></dialog>
+    <div id="unitTooltip" class="unit-tooltip" hidden></div>
+  </main>`;
+
+  document.querySelector('#restartBtn')?.addEventListener('click', () => { if (confirm('현재 게임을 버리고 새로 시작할까요?')) newGameSetup(); });
+  document.querySelector('#againBtn')?.addEventListener('click', newGameSetup);
+  document.querySelector('#undoBtn')?.addEventListener('click', undoLastHumanTurn);
+  document.querySelector('#rulesBtn')?.addEventListener('click', () => document.querySelector<HTMLDialogElement>('#rulesDialog')?.showModal());
+  document.querySelectorAll<HTMLButtonElement>('[data-hand-index]').forEach((btn) => btn.addEventListener('click', () => { selectedCoinIndex = Number(btn.dataset.handIndex ?? 0); previewHexes.clear(); renderGame(); }));
+  document.querySelectorAll<HTMLButtonElement>('.utility-toggle').forEach((btn) => btn.addEventListener('click', () => {
+    const next = btn.dataset.utility as 'analysis' | 'bot' | 'log';
+    utilityPanel = utilityPanel === next ? null : next;
+    renderGame();
+  }));
+  document.querySelector('#utilityClose')?.addEventListener('click', () => { utilityPanel = null; renderGame(); });
+
+  const actionMap = new Map(actions.map((a) => [a.id, a]));
+  document.querySelectorAll<HTMLButtonElement>('.action-btn').forEach((btn) => {
+    const action = actionMap.get(btn.dataset.actionId ?? '');
+    if (!action) return;
+    btn.addEventListener('mouseenter', () => { previewHexes = new Set(action.relatedHexes); renderBoardOnly(); });
+    btn.addEventListener('mouseleave', () => { previewHexes.clear(); renderBoardOnly(); });
+    btn.addEventListener('click', () => {
+      if (!state) return;
+      previewHexes.clear();
+      try {
+        if (action.source === 'HAND') undoStack.push(cloneState(state));
+        executeAction(state, action);
+        afterResolvedAction(state);
+        selectedCoinIndex = 0;
+        saveState();
+        render();
+      } catch (error) {
+        console.error(error);
+        alert(`행동 처리 중 오류: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    });
+  });
+  bindUnitInfoInteractions();
+}
