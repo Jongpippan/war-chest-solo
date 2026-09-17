@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build-test:
@@ -16,40 +16,25 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Apply staged v0.12 combat and responsive patch
-        if: ${{ hashFiles('.v12/apply.py') != '' }}
-        run: python .v12/apply.py
+
       - name: Install dependencies
         run: npm install --no-package-lock
-      - name: Run tests
+
+      - name: Run unit and engine tests
         run: npm test
+
       - name: Run bot simulation
         run: node test/simulate.mjs
-      - name: Install Playwright for v0.12 browser regression
-        if: ${{ hashFiles('.v12/interaction.mjs') != '' }}
+
+      - name: Install mobile browser test runtime
         run: |
           npm install --no-save playwright@1.55.0
-          npx playwright install chromium
-      - name: Verify combat identity animation and mobile layout
-        if: ${{ hashFiles('.v12/interaction.mjs') != '' }}
+          npx playwright install --with-deps chromium
+
+      - name: Run mobile interaction regression
         run: |
           python3 -m http.server 4173 > /tmp/war-chest-http.log 2>&1 &
           SERVER_PID=$!
           trap 'kill $SERVER_PID || true' EXIT
           sleep 1
-          node .v12/interaction.mjs
-      - name: Upload v0.12 visual regression screenshots
-        if: ${{ hashFiles('.v12/screens') != '' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: v012-combat-responsive-regression
-          path: .v12/screens/*.png
-      - name: Commit v0.12 source and build output
-        if: ${{ hashFiles('.v12/apply.py') != '' }}
-        run: |
-          rm -rf .v12
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -A
-          git commit -m 'fix: combat identity playback and mobile table v0.12'
-          git push
+          node test/mobile-ui.mjs
