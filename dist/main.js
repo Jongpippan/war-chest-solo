@@ -21,8 +21,54 @@ let undoStack = [];
 let lastBotThought = null;
 let botThoughtHistory = [];
 let utilityPanel = null;
+let boardPath = [];
 function esc(value) {
     return value.replace(/[&<>'"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[ch]));
+}
+const GAME_TERM_ALIASES = {
+    '공격': 'Attack',
+    '이동': 'Move',
+    '배치': 'Deploy',
+    '강화': 'Bolster',
+    '전술': 'Tactic',
+    '점령': 'Control',
+    '영입': 'Recruit',
+    '패스': 'Pass',
+    '기동': 'Maneuver',
+    '주도권': 'Initiative',
+    '거점': 'Location',
+    '공급': 'Supply',
+    '제거': 'Removed',
+};
+const GAME_TERMS = ['Claim Initiative', 'Initiative', 'Maneuver', 'Deploy', 'Bolster', 'Tactic', 'Attack', 'Move', 'Control', 'Recruit', 'Pass', 'Location', 'Supply', 'Removed'];
+function termClass(term) {
+    return `term-${term.toLowerCase().replace(/\s+/g, '-')}`;
+}
+function gameTerm(term) {
+    return `<span class="game-term ${termClass(term)}">${esc(term)}</span>`;
+}
+function formatGameText(text) {
+    const aliases = [...Object.entries(GAME_TERM_ALIASES), ...GAME_TERMS.map((term) => [term, term])]
+        .sort((a, b) => b[0].length - a[0].length);
+    let parts = [{ text }];
+    for (const [from, to] of aliases) {
+        const next = [];
+        for (const part of parts) {
+            if (part.term || !part.text.includes(from)) {
+                next.push(part);
+                continue;
+            }
+            const split = part.text.split(from);
+            split.forEach((piece, index) => {
+                if (piece)
+                    next.push({ text: piece });
+                if (index < split.length - 1)
+                    next.push({ text: to, term: to });
+            });
+        }
+        parts = next;
+    }
+    return parts.map((part) => part.term ? gameTerm(part.term) : esc(part.text)).join('');
 }
 function loadDifficulty() {
     try {
@@ -276,6 +322,7 @@ function clearSave() {
 }
 function resetSessionUi() {
     selectedCoinIndex = 0;
+    boardPath = [];
     previewHexes.clear();
     undoStack = [];
     lastBotThought = null;
@@ -459,7 +506,7 @@ function renderUnitTooltip(coin, stats = {}) {
         <div class="tooltip-title-wrap"><div class="eyebrow">SPECIAL COIN</div><h4>${esc(info.ko)}</h4></div>
       </div>
       ${tooltipStatsHtml(stats)}
-      <div class="rule-sections"><div class="rule-section note"><span class="rule-kind">용도</span><p>${esc(info.rules)}</p></div></div>
+      <div class="rule-sections"><div class="rule-section note"><span class="rule-kind">USE</span><p>${esc(info.rules)}</p></div></div>
     `;
     }
     const unit = UNIT_DEFS[coin];
@@ -474,7 +521,7 @@ function renderUnitTooltip(coin, stats = {}) {
         <div class="coin-count">×${unit.coinCount}</div>
       </div>
       ${tooltipStatsHtml(stats)}
-      <div class="diagram-caption">전술 / 이동 예시</div>
+      <div class="diagram-caption">TACTIC / MANEUVER EXAMPLE</div>
       ${renderUnitDiagram(coin)}
       ${ruleSectionsHtml(coin)}
     </article>
@@ -666,7 +713,7 @@ function renderBagZone(id) {
     const count = state.players[id].bag.length;
     return `<div class="resource-zone bag-zone"><div class="resource-label"><span>BAG</span><b>${count}</b></div><div class="bag-visual" aria-label="Bag ${count} coins"><svg viewBox="0 0 44 50" aria-hidden="true"><path d="M12 9c5 3 15 3 20 0l-3.2 7.2C36 21 39 29 37.2 37.5 35.6 45 29 47 22 47S8.4 45 6.8 37.5C5 29 8 21 15.2 16.2L12 9Z"/><path d="M13 8c4.5-3 13.5-3 18 0"/></svg><span class="bag-count">${count}</span><span class="peeking-coin one">${coinBackSvg()}</span><span class="peeking-coin two">${coinBackSvg()}</span></div></div>`;
 }
-function renderDiscardZone(id) {
+function renderDiscardZone(id, actions = []) {
     if (!state)
         return '';
     const p = state.players[id];
@@ -674,9 +721,12 @@ function renderDiscardZone(id) {
     const coins = visible.map((d) => tableCoin(d.faceUp ? d.coin : null, { faceUp: d.faceUp, className: 'discard-coin' })).join('');
     const up = p.discard.filter((d) => d.faceUp).length;
     const down = p.discard.length - up;
-    return `<div class="resource-zone discard-zone"><div class="resource-label"><span>DISCARD</span><b>${p.discard.length}</b></div><div class="discard-stack">${coins || '<span class="empty-zone">비어 있음</span>'}${p.discard.length > 6 ? `<span class="more-count">+${p.discard.length - 6}</span>` : ''}</div><div class="discard-legend"><span>앞 ${up}</span><span>뒤 ${down}</span></div></div>`;
+    const pass = id === 'human' ? actions.find((a) => a.kind === 'PASS') : undefined;
+    const tag = pass ? 'button' : 'div';
+    const attrs = pass ? ' type="button" data-pass-action="1" aria-label="Pass with selected Coin"' : '';
+    return `<${tag}${attrs} class="resource-zone discard-zone ${pass ? 'face-down-action actionable' : ''}"><div class="resource-label"><span>DISCARD</span><b>${p.discard.length}</b></div><div class="discard-stack">${coins || '<span class="empty-zone">EMPTY</span>'}${p.discard.length > 6 ? `<span class="more-count">+${p.discard.length - 6}</span>` : ''}</div><div class="discard-legend"><span>UP ${up}</span><span>DOWN ${down}</span></div>${pass ? `<span class="zone-action-tag">${gameTerm('Pass')}</span>` : ''}</${tag}>`;
 }
-function renderSupplyCard(type, owner) {
+function renderSupplyCard(type, owner, actions = []) {
     if (!state)
         return '';
     const d = UNIT_DEFS[type];
@@ -684,28 +734,157 @@ function renderSupplyCard(type, owner) {
     const supply = p.supply[type] ?? 0;
     const boardStrength = state.boardUnits.filter((u) => u.owner === owner && u.type === type).reduce((n, u) => n + u.strength, 0);
     const removed = p.removed.filter((c) => c === type).length;
-    const stackCoins = Array.from({ length: Math.min(supply, 4) }, (_, i) => `<span class="supply-mini-coin" style="--i:${i};--coin-accent:${d.accent}">${unitIconSvg(type)}</span>`).join('');
-    return `<article class="supply-card" style="--accent:${d.accent}" data-unit-type="${type}" data-owner-label="${owner === 'human' ? '내 유닛' : '봇 유닛'}" data-supply="${supply}" data-board="${boardStrength}" data-removed="${removed}">
-    <div class="supply-card-head"><span class="supply-icon">${unitIconSvg(type)}</span><span class="supply-name"><strong>${esc(d.ko)}</strong><small>${esc(d.name)}</small></span><b class="supply-total">×${d.coinCount}</b></div>
-    <div class="supply-card-foot"><div class="supply-stack" aria-label="Supply ${supply}">${stackCoins || '<span class="supply-empty">0</span>'}</div><div class="supply-stats"><span>공급 <b>${supply}</b></span><span>보드 <b>${boardStrength}</b></span><span>제거 <b>${removed}</b></span></div></div>
-  </article>`;
+    const stackCoins = Array.from({ length: Math.min(supply, 5) }, (_, i) => `<span class="supply-mini-coin" style="--i:${i};--coin-accent:${d.accent}">${unitIconSvg(type)}</span>`).join('');
+    const recruit = owner === 'human' ? actions.find((a) => a.kind === 'RECRUIT' && a.payload.recruitType === type) : undefined;
+    const tag = recruit ? 'button' : 'article';
+    const attrs = recruit ? ` type="button" data-recruit-type="${type}" aria-label="Recruit ${esc(d.name)}"` : '';
+    return `<${tag}${attrs} class="supply-card ${recruit ? 'actionable recruit-action' : ''}" style="--accent:${d.accent}" data-unit-type="${type}" data-owner-label="${owner === 'human' ? 'Your Unit' : 'Bot Unit'}" data-supply="${supply}" data-board="${boardStrength}" data-removed="${removed}">
+    <div class="supply-card-head"><span class="supply-icon">${unitIconSvg(type)}</span><span class="supply-name"><strong>${esc(d.name)}</strong><small>${esc(d.ko)}</small></span><b class="supply-total">×${d.coinCount}</b></div>
+    <div class="supply-card-foot"><div class="supply-stack" aria-label="Supply ${supply}">${stackCoins || '<span class="supply-empty">0</span>'}</div><div class="supply-stats"><span>SUPPLY <b>${supply}</b></span><span>BOARD <b>${boardStrength}</b></span><span>OUT <b>${removed}</b></span></div></div>
+    ${recruit ? `<span class="supply-action-tag">${gameTerm('Recruit')}</span>` : ''}
+  </${tag}>`;
 }
-function renderPlayerPanel(id) {
+function renderPlayerPanel(id, actions = []) {
     if (!state)
         return '';
     const p = state.players[id];
     const controlled = 6 - p.markersRemaining;
-    const initiative = state.initiative === id ? '<span class="initiative-badge">INITIATIVE</span>' : '';
+    const initiative = state.initiative === id ? `<span class="initiative-badge">${gameTerm('Initiative')}</span>` : '';
     return `<section class="player-panel tabletop-player ${id}">
     <div class="player-heading tabletop-heading">
-      <div><div class="eyebrow">${id === 'human' ? 'YOUR TABLE' : `BOT · ${difficultyLabel(difficulty).toUpperCase()}`}</div><h2>${playerName(id)} ${initiative}</h2></div>
-      <div class="control-score"><strong>${controlled}</strong><span>/ 6 거점</span></div>
+      <div><div class="eyebrow">${id === 'human' ? 'YOU' : `BOT · ${difficultyLabel(difficulty).toUpperCase()}`}</div><h2>${id === 'human' ? 'Your Table' : 'Bot Table'} ${initiative}</h2></div>
+      <div class="control-score"><strong>${controlled}</strong><span>/ 6 Locations</span></div>
     </div>
     ${renderControlMarkers(id)}
-    <div class="resource-table">${renderHandZone(id)}${renderBagZone(id)}${renderDiscardZone(id)}</div>
-    <div class="supply-heading"><span>UNIT SUPPLY</span><small>카드 Hover로 능력 확인</small></div>
-    <div class="supply-grid">${p.units.map((u) => renderSupplyCard(u, id)).join('')}</div>
+    <div class="resource-table">${renderHandZone(id)}${renderBagZone(id)}${renderDiscardZone(id, actions)}</div>
+    <div class="supply-heading"><span>UNIT SUPPLY</span><small>${id === 'human' ? 'Click a highlighted Supply stack to Recruit' : 'Public information'}</small></div>
+    <div class="supply-grid">${p.units.map((u) => renderSupplyCard(u, id, actions)).join('')}</div>
   </section>`;
+}
+function selectedHumanCoin() {
+    if (!state)
+        return null;
+    if (state.forcedCoin?.player === 'human')
+        return state.forcedCoin.coin;
+    return state.players.human.hand[selectedCoinIndex] ?? null;
+}
+function actionInteractionPaths(action) {
+    const unit = action.payload.unitId ? `unit:${action.payload.unitId}` : null;
+    const target = action.payload.targetUnitId ? `unit:${action.payload.targetUnitId}` : null;
+    const granted = action.payload.grantedUnitId ? `unit:${action.payload.grantedUnitId}` : null;
+    const dest = action.payload.destination ? `hex:${action.payload.destination}` : null;
+    switch (action.kind) {
+        case 'DEPLOY': return dest ? [[dest]] : [];
+        case 'BOLSTER': return unit ? [[unit, 'special:BOLSTER']] : [];
+        case 'MOVE':
+        case 'FREE_MOVE': return unit && dest ? [[unit, dest]] : [];
+        case 'ATTACK':
+        case 'FREE_ATTACK': return unit && target ? [[unit, target]] : [];
+        case 'CONTROL':
+        case 'FREE_CONTROL': return unit ? [[unit, 'special:CONTROL']] : [];
+        case 'TACTIC_ARCHER':
+        case 'TACTIC_CROSSBOWMAN': return unit && target ? [[unit, 'special:TACTIC', target]] : [];
+        case 'TACTIC_CAVALRY':
+        case 'TACTIC_LANCER': return unit && dest && target ? [[unit, 'special:TACTIC', dest, target]] : [];
+        case 'TACTIC_ENSIGN': return unit && granted && dest ? [[unit, 'special:TACTIC', granted, dest]] : [];
+        case 'TACTIC_LIGHT_CAVALRY':
+        case 'TACTIC_ROYAL_GUARD': return unit && dest ? [[unit, 'special:TACTIC', dest]] : [];
+        case 'TACTIC_MARSHALL': return unit && granted && target ? [[unit, 'special:TACTIC', granted, target]] : [];
+        case 'TACTIC_FOOTMAN': {
+            if (!state)
+                return [];
+            return state.boardUnits.filter((u) => u.owner === action.player && u.type === 'FOOTMAN').map((u) => [`unit:${u.id}`, 'special:TACTIC']);
+        }
+        case 'SKIP_ABILITY': return [['special:SKIP']];
+        default: return [];
+    }
+}
+function interactionEntries(actions) {
+    return actions.flatMap((action) => actionInteractionPaths(action).map((path) => ({ action, path })));
+}
+function isPathPrefix(prefix, path) {
+    return prefix.length <= path.length && prefix.every((key, index) => path[index] === key);
+}
+function boardInteractionState(actions) {
+    const entries = interactionEntries(actions);
+    const active = entries.filter((entry) => isPathPrefix(boardPath, entry.path));
+    const nextKeys = new Set(active.map((entry) => entry.path[boardPath.length]).filter((key) => Boolean(key)));
+    const selectedKeys = new Set(boardPath);
+    const kindsByKey = new Map();
+    for (const entry of active) {
+        const key = entry.path[boardPath.length];
+        if (!key)
+            continue;
+        if (!kindsByKey.has(key))
+            kindsByKey.set(key, new Set());
+        kindsByKey.get(key).add(entry.action.kind);
+    }
+    return { entries, active, nextKeys, selectedKeys, kindsByKey };
+}
+function boardTargetClass(key, ui) {
+    const kinds = ui.kindsByKey.get(key) ?? new Set();
+    const attack = [...kinds].some((kind) => kind.includes('ATTACK') || kind.includes('ARCHER') || kind.includes('CROSSBOWMAN') || kind.includes('LANCER') || kind.includes('CAVALRY') || kind.includes('MARSHALL'));
+    const deploy = kinds.has('DEPLOY');
+    return `${ui.nextKeys.has(key) ? 'actionable interaction-target' : ''} ${ui.selectedKeys.has(key) ? 'interaction-selected' : ''} ${attack ? 'attack-target' : ''} ${deploy ? 'deploy-target' : ''}`;
+}
+function executeHumanAction(action) {
+    if (!state)
+        return;
+    previewHexes.clear();
+    try {
+        if (action.source === 'HAND')
+            undoStack.push(cloneState(state));
+        executeAction(state, action);
+        afterResolvedAction(state);
+        selectedCoinIndex = 0;
+        boardPath = [];
+        saveState();
+        render();
+    }
+    catch (error) {
+        console.error(error);
+        alert(`Action error: ${error instanceof Error ? error.message : String(error)}`);
+    }
+}
+function handleBoardKey(key, actions) {
+    const entries = interactionEntries(actions);
+    let nextPath = [...boardPath, key];
+    let matches = entries.filter((entry) => isPathPrefix(nextPath, entry.path));
+    if (!matches.length) {
+        nextPath = [key];
+        matches = entries.filter((entry) => isPathPrefix(nextPath, entry.path));
+    }
+    if (!matches.length)
+        return;
+    const complete = matches.find((entry) => entry.path.length === nextPath.length);
+    const hasLonger = matches.some((entry) => entry.path.length > nextPath.length);
+    if (complete && !hasLonger) {
+        executeHumanAction(complete.action);
+        return;
+    }
+    boardPath = nextPath;
+    previewHexes = new Set(matches.flatMap((entry) => entry.action.relatedHexes));
+    renderGame();
+}
+function renderInteractionHud(actions) {
+    if (!state)
+        return '';
+    if (state.winner)
+        return `<div class="interaction-hud game-over-hud">GAME OVER</div>`;
+    if (state.activePlayer !== 'human')
+        return `<div class="interaction-hud bot-turn-hud"><strong>BOT TURN</strong><span>Public zones remain visible while the bot resolves its Coin.</span></div>`;
+    const coin = selectedHumanCoin();
+    const info = coin ? infoForCoin(coin) : null;
+    const skip = actions.find((a) => a.kind === 'SKIP_ABILITY');
+    const stepCopy = boardPath.length
+        ? 'Continue on the highlighted Unit or hex. Small badges beside the selected Unit resolve special actions.'
+        : 'Choose a Coin, then interact directly with highlighted Units and hexes on the Battlefield.';
+    return `<div class="interaction-hud">
+    <div class="selected-coin-hud">${coin && info ? `<span class="table-coin front static" style="--coin-accent:${info.accent}" data-unit-type="${coin}"><span class="table-coin-inner">${unitIconSvg(coin)}</span></span><div><small>SELECTED COIN</small><strong>${esc(coinLabel(coin))}</strong></div>` : '<div><small>SELECTED COIN</small><strong>None</strong></div>'}</div>
+    <div class="interaction-copy"><strong>Battlefield input</strong><span>${stepCopy}</span><div class="interaction-legend">${gameTerm('Deploy')} · ${gameTerm('Maneuver')} · ${gameTerm('Bolster')} · ${gameTerm('Tactic')} · ${gameTerm('Control')}</div></div>
+    <div class="face-down-guide"><small>FACE-DOWN</small><span>Supply → ${gameTerm('Recruit')}</span><span>Initiative marker → ${gameTerm('Claim Initiative')}</span><span>Discard → ${gameTerm('Pass')}</span></div>
+    <div class="interaction-hud-actions">${boardPath.length ? '<button type="button" id="cancelBoardPath" class="micro-action">Cancel</button>' : ''}${skip ? '<button type="button" id="skipAbilityBtn" class="micro-action">Skip Ability</button>' : ''}</div>
+  </div>`;
 }
 function axialToPixel(id) {
     const { q, r } = parseHex(id);
@@ -734,15 +913,19 @@ function inactiveCluster(cx, cy, size = 28) {
     }).join('');
     return `<g class="inactive-cluster">${pts}</g>`;
 }
-function renderBoardSvg() {
+function renderBoardSvg(actions = []) {
     if (!state)
         return '';
+    const ui = boardInteractionState(actions);
     const hexes = BOARD_HEXES.map((id) => {
         const { x, y } = axialToPixel(id);
         const isLocation = ALL_LOCATIONS.includes(id);
         const controller = state.locations[id];
         const unit = state.boardUnits.find((u) => u.hex === id);
         const preview = previewHexes.has(id);
+        const hexKey = `hex:${id}`;
+        const hexCls = boardTargetClass(hexKey, ui);
+        const hexAttr = ui.nextKeys.has(hexKey) ? ` data-board-key="${hexKey}" role="button"` : '';
         const fill = controller === 'human'
             ? '#d5ece9'
             : controller === 'bot'
@@ -754,18 +937,35 @@ function renderBoardSvg() {
             ? `<g class="location-emblem"><circle cx="${x}" cy="${y}" r="18" fill="rgba(255,250,241,.8)" stroke="${controller === 'human' ? '#2c6f77' : controller === 'bot' ? '#91454e' : '#9c7c3e'}" stroke-width="2.5"/><circle cx="${x}" cy="${y}" r="8.5" fill="${controller === 'human' ? '#2c6f77' : controller === 'bot' ? '#91454e' : '#b0904c'}" opacity=".85"/></g>`
             : '';
         let unitMark = '';
+        let badges = '';
         if (unit) {
             const d = UNIT_DEFS[unit.type];
             const ownerFill = unit.owner === 'human' ? '#275e67' : '#853f47';
-            unitMark = `<g class="token unit-token" data-unit-type="${unit.type}" data-owner-label="${unit.owner === 'human' ? '내 유닛' : '봇 유닛'}" data-stack="${unit.strength}" data-location="${coordinateLabel(id)}">
-        <circle cx="${x}" cy="${y + 3}" r="27" fill="rgba(0,0,0,.18)"/>
-        <circle cx="${x}" cy="${y}" r="27" fill="${ownerFill}" stroke="#f4e7c3" stroke-width="2.5"/>
-        <circle cx="${x}" cy="${y}" r="21.5" fill="${d.accent}" stroke="rgba(255,255,255,.55)" stroke-width="1.5"/>
-        ${tokenIconMarkup(unit.type, x, y, 22)}
-        ${unit.strength > 1 ? `<g class="stack-badge"><circle cx="${x + 20}" cy="${y - 18}" r="11.5" fill="#fff5db" stroke="#453722" stroke-width="1.8"/><text x="${x + 20}" y="${y - 14}" text-anchor="middle" class="stack-count">${unit.strength}</text></g>` : ''}
+            const unitKey = `unit:${unit.id}`;
+            const unitCls = boardTargetClass(unitKey, ui);
+            const unitAttr = ui.nextKeys.has(unitKey) ? ` data-board-key="${unitKey}" role="button"` : '';
+            unitMark = `<g class="token unit-token ${unitCls}"${unitAttr} data-unit-type="${unit.type}" data-owner-label="${unit.owner === 'human' ? 'Your Unit' : 'Bot Unit'}" data-stack="${unit.strength}" data-location="${coordinateLabel(id)}">
+        <circle cx="${x}" cy="${y + 3}" r="31" fill="rgba(0,0,0,.2)"/>
+        <circle cx="${x}" cy="${y}" r="30" fill="${ownerFill}" stroke="#f4e7c3" stroke-width="2.8"/>
+        <circle cx="${x}" cy="${y}" r="24.5" fill="${d.accent}" stroke="rgba(255,255,255,.58)" stroke-width="1.7"/>
+        ${tokenIconMarkup(unit.type, x, y, 26)}
+        ${unit.strength > 1 ? `<g class="stack-badge"><circle cx="${x + 22}" cy="${y - 21}" r="12" fill="#fff5db" stroke="#453722" stroke-width="1.8"/><text x="${x + 22}" y="${y - 17}" text-anchor="middle" class="stack-count">${unit.strength}</text></g>` : ''}
       </g>`;
+            if (ui.selectedKeys.has(unitKey)) {
+                const specials = [
+                    ['special:BOLSTER', 'BOLSTER', 'bolster'],
+                    ['special:TACTIC', 'TACTIC', 'tactic'],
+                    ['special:CONTROL', 'CONTROL', 'control'],
+                ];
+                let chipIndex = 0;
+                badges = specials.filter(([key]) => ui.nextKeys.has(key)).map(([key, label, cls]) => {
+                    const by = y - 44 + chipIndex * 23;
+                    chipIndex += 1;
+                    return `<g class="board-action-chip ${cls}" data-board-key="${key}" role="button"><rect x="${x + 30}" y="${by - 13}" width="68" height="20" rx="10"/><text x="${x + 64}" y="${by + 1}" text-anchor="middle">${label}</text></g>`;
+                }).join('');
+            }
         }
-        return `<g class="hex-cell ${preview ? 'preview' : ''}"><polygon points="${hexPoints(x, y)}" fill="${fill}" stroke="${preview ? '#f4c65d' : '#b59558'}" stroke-width="${preview ? 4 : 1.6}"/>${locationMark}${unitMark}</g>`;
+        return `<g class="hex-cell ${preview ? 'preview' : ''} ${hexCls}"${hexAttr}><polygon points="${hexPoints(x, y)}" fill="${fill}" stroke="${preview ? '#f4c65d' : '#b59558'}" stroke-width="${preview ? 4 : 1.6}"/>${locationMark}${unitMark}${badges}</g>`;
     }).join('');
     return `<svg class="battlefield" viewBox="0 0 960 680" role="img" aria-label="War Chest battlefield">
     <defs>
@@ -790,7 +990,8 @@ function renderBoardSvg() {
 function renderBoardOnly() {
     const board = document.querySelector('#boardHost');
     if (board) {
-        board.innerHTML = renderBoardSvg();
+        const actions = state?.activePlayer === 'human' && !state.winner ? humanCandidates() : [];
+        board.innerHTML = renderBoardSvg(actions);
         bindUnitInfoInteractions();
     }
 }
@@ -873,31 +1074,32 @@ function renderAnalysis() {
     const bStr = boardStrength('bot');
     const hOut = state.players.human.removed.length;
     const bOut = state.players.bot.removed.length;
-    let summary = '균형';
+    let summary = 'EVEN';
     const delta = (hLoc - bLoc) * 3 + (hStr - bStr) + (bOut - hOut) * .5;
     if (delta >= 3)
-        summary = '당신 우세';
+        summary = 'YOU AHEAD';
     else if (delta <= -3)
-        summary = '봇 우세';
-    return `<section class="analysis-panel"><div class="eyebrow">POSITION SNAPSHOT</div><div class="analysis-title"><h3>${summary}</h3><span>간이 비교</span></div><div class="metric-grid"><div><span>거점</span><b>${hLoc} : ${bLoc}</b></div><div><span>전력</span><b>${hStr} : ${bStr}</b></div><div><span>제거</span><b>${hOut} : ${bOut}</b></div><div><span>압박</span><b>${locationThreats('human')} : ${locationThreats('bot')}</b></div></div><p>왼쪽이 당신, 오른쪽이 봇입니다. Hover로 유닛 설명, 버튼 Hover로 경로를 확인하세요.</p></section>`;
+        summary = 'BOT AHEAD';
+    return `<section class="analysis-panel"><div class="eyebrow">POSITION SNAPSHOT</div><div class="analysis-title"><h3>${summary}</h3><span>BOT : YOU</span></div><div class="metric-grid"><div><span>LOCATIONS</span><b>${bLoc} : ${hLoc}</b></div><div><span>STRENGTH</span><b>${bStr} : ${hStr}</b></div><div><span>REMOVED</span><b>${bOut} : ${hOut}</b></div><div><span>PRESSURE</span><b>${locationThreats('bot')} : ${locationThreats('human')}</b></div></div></section>`;
 }
 function renderBotThought() {
     if (!lastBotThought)
-        return `<section class="bot-thought"><div class="eyebrow">BOT EXPLAIN</div><h3>아직 수 설명이 없습니다</h3><p>봇이 수를 두면 선택 이유와 대안이 여기에 표시됩니다.</p></section>`;
-    return `<section class="bot-thought"><div class="eyebrow">BOT EXPLAIN · ROUND ${lastBotThought.round}</div><h3>${esc(lastBotThought.label)}</h3><p>${esc(lastBotThought.reason)}</p><details><summary>상위 후보 비교</summary><ol>${lastBotThought.alternatives.map((a) => `<li><span>${esc(a.label)}</span><b>${Math.round(a.score)}</b></li>`).join('')}</ol></details></section>`;
+        return `<section class="bot-thought"><div class="eyebrow">BOT EXPLAIN</div><h3>No decision yet</h3><p>The bot's reason and alternatives appear here after its turn.</p></section>`;
+    return `<section class="bot-thought"><div class="eyebrow">BOT EXPLAIN · ROUND ${lastBotThought.round}</div><h3>${formatGameText(lastBotThought.label)}</h3><p>${formatGameText(lastBotThought.reason)}</p><details><summary>Top alternatives</summary><ol>${lastBotThought.alternatives.map((a) => `<li><span>${formatGameText(a.label)}</span><b>${Math.round(a.score)}</b></li>`).join('')}</ol></details></section>`;
 }
 function renderLog() {
     if (!state)
         return '';
     const entries = [...state.log].slice(-12).reverse();
-    return `<section class="log-panel"><div class="eyebrow">BATTLE LOG</div><h3>최근 행동</h3><ol>${entries.map((x) => `<li>${esc(x)}</li>`).join('')}</ol></section>`;
+    return `<section class="log-panel"><div class="eyebrow">BATTLE LOG</div><h3>Recent actions</h3><ol>${entries.map((x) => `<li>${formatGameText(x)}</li>`).join('')}</ol></section>`;
 }
-function renderStatusBar() {
+function renderStatusBar(actions = []) {
     if (!state)
         return '';
-    const active = state.activePlayer === 'human' ? '당신 차례' : '봇 차례';
-    const initiative = state.initiative === 'human' ? '당신' : '봇';
-    return `<div class="status-bar"><span><b>Round ${state.round}</b></span><span class="turn-pill ${state.activePlayer}">${active}</span><span>Initiative <b>${initiative}</b></span><span class="difficulty-chip">BOT ${difficultyLabel(difficulty)}</span><div class="utility-toolbar"><button type="button" class="utility-toggle ${utilityPanel === 'analysis' ? 'active' : ''}" data-utility="analysis">◎ 분석</button><button type="button" class="utility-toggle ${utilityPanel === 'bot' ? 'active' : ''}" data-utility="bot">◇ 봇 설명</button><button type="button" class="utility-toggle ${utilityPanel === 'log' ? 'active' : ''}" data-utility="log">≡ 로그</button></div></div>`;
+    const active = state.activePlayer === 'human' ? 'YOUR TURN' : 'BOT TURN';
+    const claim = actions.find((a) => a.kind === 'CLAIM_INITIATIVE');
+    const owner = state.initiative === 'human' ? 'YOU' : 'BOT';
+    return `<div class="status-bar"><span><b>Round ${state.round}</b></span><span class="turn-pill ${state.activePlayer}">${active}</span><button type="button" id="claimInitiativeToken" class="initiative-token-control ${state.initiative === 'human' ? 'human-owned' : 'bot-owned'} ${claim ? 'actionable' : ''}" ${claim ? '' : 'disabled'}><span class="initiative-medallion">◆</span><span>${gameTerm('Initiative')} <b>${owner}</b></span></button><span class="difficulty-chip">BOT ${difficultyLabel(difficulty)}</span><div class="utility-toolbar"><button type="button" class="utility-toggle ${utilityPanel === 'analysis' ? 'active' : ''}" data-utility="analysis">◎ ANALYSIS</button><button type="button" class="utility-toggle ${utilityPanel === 'bot' ? 'active' : ''}" data-utility="bot">◇ BOT</button><button type="button" class="utility-toggle ${utilityPanel === 'log' ? 'active' : ''}" data-utility="log">≡ LOG</button></div></div>`;
 }
 function renderUtilityDrawer() {
     if (!utilityPanel)
@@ -915,6 +1117,7 @@ function undoLastHumanTurn() {
     lastBotThought = null;
     botThoughtHistory.pop();
     selectedCoinIndex = 0;
+    boardPath = [];
     previewHexes.clear();
     saveState();
     render();
@@ -925,56 +1128,67 @@ function renderGame() {
     const actions = state.activePlayer === 'human' && !state.winner ? humanCandidates() : [];
     const sanity = stateSanity(state);
     app.innerHTML = `<main class="game-shell">
-    <header class="topbar compact"><div><div class="eyebrow">LOCAL SOLO · TABLE VIEW</div><h1>War Chest Solo</h1></div><div class="topbar-actions"><button id="undoBtn" class="ghost" ${undoStack.length && !botBusy ? '' : 'disabled'}>↶ Undo</button><button id="rulesBtn" class="ghost">룰 메모</button><button id="restartBtn" class="ghost danger">처음부터</button></div></header>
-    ${renderStatusBar()}
-    ${sanity.length ? `<div class="debug-warning">상태 검사 경고: ${esc(sanity.join(' / '))}</div>` : ''}
-    <section class="workspace-grid">
-      <aside class="left-rail player-rail">${renderPlayerPanel('human')}</aside>
-      <section class="board-stage"><div class="board-panel"><div class="board-title"><div><div class="eyebrow">BATTLEFIELD</div><h2>중앙 전장</h2></div><div class="board-legend"><span><i class="legend-dot human"></i>당신</span><span><i class="legend-dot bot"></i>봇</span><span><i class="legend-location"></i>Location</span></div></div><div id="boardHost">${renderBoardSvg()}</div></div></section>
-      <aside class="right-rail"><div class="bot-table-wrap">${renderPlayerPanel('bot')}</div><section class="action-panel">${renderActionPanel(actions)}</section></aside>
+    <header class="topbar compact"><div><div class="eyebrow">LOCAL SOLO · DIRECT TABLE INPUT</div><h1>War Chest Solo</h1></div><div class="topbar-actions"><button id="undoBtn" class="ghost" ${undoStack.length && !botBusy ? '' : 'disabled'}>↶ Undo</button><button id="rulesBtn" class="ghost">Rules</button><button id="restartBtn" class="ghost danger">Restart</button></div></header>
+    ${renderStatusBar(actions)}
+    ${sanity.length ? `<div class="debug-warning">State warning: ${esc(sanity.join(' / '))}</div>` : ''}
+    <section class="workspace-grid direct-table-layout">
+      <aside class="left-rail player-rail bot-side">${renderPlayerPanel('bot', actions)}</aside>
+      <section class="board-stage"><div class="board-panel"><div class="board-title"><div><div class="eyebrow">BATTLEFIELD</div><h2>Direct Battlefield</h2></div><div class="board-legend"><span><i class="legend-dot bot"></i>BOT</span><span><i class="legend-dot human"></i>YOU</span><span><i class="legend-location"></i>Location</span></div></div>${renderInteractionHud(actions)}<div id="boardHost">${renderBoardSvg(actions)}</div></div></section>
+      <aside class="right-rail player-rail human-side">${renderPlayerPanel('human', actions)}</aside>
     </section>
     ${renderUtilityDrawer()}
-    <dialog id="rulesDialog" class="rules-dialog"><form method="dialog"><button class="dialog-close">×</button></form><div class="eyebrow">QUICK RULES</div><h2>빠른 룰 메모</h2><p>한 라운드에 각자 코인 3개를 뽑고 Initiative 보유자부터 번갈아 1개씩 사용합니다.</p><ul><li><b>배치/강화:</b> 유닛 코인을 보드에 직접 놓습니다.</li><li><b>뒷면:</b> Initiative, Recruit, Pass.</li><li><b>앞면:</b> Move, Attack, Control, Tactic.</li><li><b>승리:</b> Control Marker 6개를 모두 보드에 놓으면 즉시 승리합니다.</li><li><b>공격:</b> 맞은 스택에서 코인 1개를 게임에서 제거합니다.</li></ul></dialog>
+    <dialog id="rulesDialog" class="rules-dialog"><form method="dialog"><button class="dialog-close">×</button></form><div class="eyebrow">QUICK RULES</div><h2>Core actions</h2><p>Draw up to 3 Coins each Round and alternate spending one Coin at a time.</p><ul><li>${gameTerm('Deploy')} / ${gameTerm('Bolster')}: place the Unit Coin directly on the Battlefield.</li><li>Face-down: ${gameTerm('Claim Initiative')}, ${gameTerm('Recruit')}, ${gameTerm('Pass')}.</li><li>Face-up ${gameTerm('Maneuver')}: ${gameTerm('Move')}, ${gameTerm('Attack')}, ${gameTerm('Control')}, or ${gameTerm('Tactic')}.</li><li>Win immediately after placing all 6 Control Markers.</li></ul></dialog>
     <div id="unitTooltip" class="unit-tooltip" hidden></div>
   </main>`;
-    document.querySelector('#restartBtn')?.addEventListener('click', () => { if (confirm('현재 게임을 버리고 새로 시작할까요?'))
+    document.querySelector('#restartBtn')?.addEventListener('click', () => { if (confirm('Restart the current game?'))
         newGameSetup(); });
     document.querySelector('#againBtn')?.addEventListener('click', newGameSetup);
     document.querySelector('#undoBtn')?.addEventListener('click', undoLastHumanTurn);
     document.querySelector('#rulesBtn')?.addEventListener('click', () => document.querySelector('#rulesDialog')?.showModal());
-    document.querySelectorAll('[data-hand-index]').forEach((btn) => btn.addEventListener('click', () => { selectedCoinIndex = Number(btn.dataset.handIndex ?? 0); previewHexes.clear(); renderGame(); }));
+    document.querySelectorAll('[data-hand-index]').forEach((btn) => btn.addEventListener('click', () => {
+        selectedCoinIndex = Number(btn.dataset.handIndex ?? 0);
+        boardPath = [];
+        previewHexes.clear();
+        renderGame();
+    }));
+    document.querySelectorAll('[data-board-key]').forEach((el) => el.addEventListener('click', (evt) => {
+        evt.stopPropagation();
+        const key = evt.currentTarget.dataset.boardKey;
+        if (key)
+            handleBoardKey(key, actions);
+    }));
+    document.querySelectorAll('[data-recruit-type]').forEach((el) => el.addEventListener('click', () => {
+        const type = el.dataset.recruitType;
+        const action = actions.find((a) => a.kind === 'RECRUIT' && a.payload.recruitType === type);
+        if (action)
+            executeHumanAction(action);
+    }));
+    document.querySelector('[data-pass-action]')?.addEventListener('click', () => {
+        const action = actions.find((a) => a.kind === 'PASS');
+        if (action)
+            executeHumanAction(action);
+    });
+    document.querySelector('#claimInitiativeToken')?.addEventListener('click', () => {
+        const action = actions.find((a) => a.kind === 'CLAIM_INITIATIVE');
+        if (action)
+            executeHumanAction(action);
+    });
+    document.querySelector('#skipAbilityBtn')?.addEventListener('click', () => {
+        const action = actions.find((a) => a.kind === 'SKIP_ABILITY');
+        if (action)
+            executeHumanAction(action);
+    });
+    document.querySelector('#cancelBoardPath')?.addEventListener('click', () => {
+        boardPath = [];
+        previewHexes.clear();
+        renderGame();
+    });
     document.querySelectorAll('.utility-toggle').forEach((btn) => btn.addEventListener('click', () => {
         const next = btn.dataset.utility;
         utilityPanel = utilityPanel === next ? null : next;
         renderGame();
     }));
     document.querySelector('#utilityClose')?.addEventListener('click', () => { utilityPanel = null; renderGame(); });
-    const actionMap = new Map(actions.map((a) => [a.id, a]));
-    document.querySelectorAll('.action-btn').forEach((btn) => {
-        const action = actionMap.get(btn.dataset.actionId ?? '');
-        if (!action)
-            return;
-        btn.addEventListener('mouseenter', () => { previewHexes = new Set(action.relatedHexes); renderBoardOnly(); });
-        btn.addEventListener('mouseleave', () => { previewHexes.clear(); renderBoardOnly(); });
-        btn.addEventListener('click', () => {
-            if (!state)
-                return;
-            previewHexes.clear();
-            try {
-                if (action.source === 'HAND')
-                    undoStack.push(cloneState(state));
-                executeAction(state, action);
-                afterResolvedAction(state);
-                selectedCoinIndex = 0;
-                saveState();
-                render();
-            }
-            catch (error) {
-                console.error(error);
-                alert(`행동 처리 중 오류: ${error instanceof Error ? error.message : String(error)}`);
-            }
-        });
-    });
     bindUnitInfoInteractions();
 }
 function sleep(ms) {
