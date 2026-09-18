@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   createGame,
   generateActionsForCoin,
+  generatePendingActions,
   executeAction,
   normalizeUnitIds,
   unitAt,
@@ -197,4 +198,71 @@ test('Move is atomic: it changes position but never strength', () => {
   assert.equal(light?.strength, 2);
   assert.equal(s.players.human.hand.length, 0);
   assert.equal(s.players.human.discard.filter((entry) => entry.coin === 'LIGHT_CAVALRY' && entry.faceUp).length, 1);
+});
+
+
+test('Berserker may remove exactly one stack Coin to make an extra Maneuver', () => {
+  const human = ['BERSERKER', 'PIKEMAN', 'CROSSBOWMAN', 'LIGHT_CAVALRY'];
+  const s = createGame(human, B, 'human');
+  s.activePlayer = 'human';
+  s.players.human.hand = ['BERSERKER'];
+  s.players.human.bag = [];
+  s.players.human.discard = [];
+  s.players.human.removed = [];
+  s.players.bot.hand = [];
+  s.players.bot.bag = [];
+  s.boardUnits = [
+    { id: 'berserker', owner: 'human', type: 'BERSERKER', hex: '0,0', strength: 2 },
+  ];
+
+  const first = generateActionsForCoin(s, 'human', 'BERSERKER', 'HAND', 0)
+    .find((action) => action.kind === 'MOVE' && action.payload.destination === '1,0');
+  assert(first);
+  executeAction(s, first);
+
+  assert.equal(s.pending?.kind, 'BERSERKER_EXTRA');
+  assert.equal(s.pending?.unitId, 'berserker');
+  assert.equal(s.boardUnits.find((unit) => unit.id === 'berserker')?.strength, 2, 'the extra Coin is not paid until the extra Maneuver is chosen');
+
+  const followUps = generatePendingActions(s);
+  const extra = followUps.find((action) => action.kind === 'FREE_MOVE' && action.payload.destination === '2,0');
+  assert(extra, 'Berserker must expose a second Maneuver from its new hex');
+  executeAction(s, extra);
+
+  const berserker = s.boardUnits.find((unit) => unit.id === 'berserker');
+  assert.equal(berserker?.hex, '2,0');
+  assert.equal(berserker?.strength, 1, 'extra Maneuver removes exactly one stack Coin');
+  assert.equal(s.players.human.removed.filter((coin) => coin === 'BERSERKER').length, 1);
+});
+
+test('Warrior Priest draws a forced Coin after Attack and it must be used immediately', () => {
+  const human = ['WARRIOR_PRIEST', 'PIKEMAN', 'CROSSBOWMAN', 'LIGHT_CAVALRY'];
+  const s = createGame(human, B, 'human');
+  s.activePlayer = 'human';
+  s.players.human.hand = ['WARRIOR_PRIEST'];
+  s.players.human.bag = ['PIKEMAN'];
+  s.players.human.discard = [];
+  s.players.human.removed = [];
+  s.players.bot.hand = [];
+  s.players.bot.bag = [];
+  s.boardUnits = [
+    { id: 'priest', owner: 'human', type: 'WARRIOR_PRIEST', hex: '0,0', strength: 1 },
+    { id: 'target', owner: 'bot', type: 'SCOUT', hex: '1,0', strength: 2 },
+  ];
+
+  const attack = generateActionsForCoin(s, 'human', 'WARRIOR_PRIEST', 'HAND', 0)
+    .find((action) => action.kind === 'ATTACK' && action.payload.targetUnitId === 'target');
+  assert(attack);
+  executeAction(s, attack);
+
+  assert.deepEqual(s.forcedCoin, { player: 'human', coin: 'PIKEMAN', source: 'WARRIOR_PRIEST' });
+  const forced = generateActionsForCoin(s, 'human', 'PIKEMAN', 'FORCED');
+  assert.ok(forced.length > 0);
+  assert.ok(forced.every((action) => action.source === 'FORCED'));
+
+  const pass = forced.find((action) => action.kind === 'PASS');
+  assert(pass);
+  executeAction(s, pass);
+  assert.equal(s.forcedCoin, null);
+  assert.ok(s.players.human.discard.some((entry) => entry.coin === 'PIKEMAN' && entry.faceUp === false));
 });
