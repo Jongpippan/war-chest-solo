@@ -971,6 +971,14 @@ async function executeHumanAction(action: ActionCandidate): Promise<void> {
 }
 
 function handleBoardKey(key: string, actions: ActionCandidate[]): void {
+  // Clicking the currently selected Unit again is a true toggle: collapse its
+  // Bolster / Tactic / Control popover and return to the initial battlefield input.
+  if (boardPath.length === 1 && boardPath[0] === key && key.startsWith('unit:')) {
+    boardPath = [];
+    previewHexes.clear();
+    renderGame();
+    return;
+  }
   const entries = interactionEntries(actions);
   let nextPath = [...boardPath, key];
   let matches = entries.filter((entry) => isPathPrefix(nextPath, entry.path));
@@ -1146,7 +1154,8 @@ function renderBoardSvg(actions: ActionCandidate[] = []): string {
       const ownerFill = unit.owner === 'human' ? '#275e67' : '#853f47';
       const unitKey = `unit:${unit.id}`;
       const unitCls = boardTargetClass(unitKey, ui);
-      const unitAttr = ui.nextKeys.has(unitKey) ? ` data-board-key="${unitKey}" role="button"` : '';
+      const unitSelectable = ui.nextKeys.has(unitKey) || (unit.owner === 'human' && ui.selectedKeys.has(unitKey));
+      const unitAttr = unitSelectable ? ` data-board-key="${unitKey}" role="button"` : '';
       unitLayer.push(`<g class="token unit-token ${unitCls} ${actionAnimating && actionAnimation?.unitId === unit.id && actionAnimation.fromHex && actionAnimation.toHex && actionAnimation.fromHex !== actionAnimation.toHex ? 'animation-hidden' : ''}"${unitAttr} data-unit-type="${unit.type}" data-owner-label="${unit.owner === 'human' ? 'Your Unit' : 'Bot Unit'}" data-stack="${unit.strength}" data-location="${coordinateLabel(id)}">
         <circle cx="${x}" cy="${y + 3}" r="34" fill="rgba(0,0,0,.2)"/>
         <circle cx="${x}" cy="${y}" r="33" fill="${ownerFill}" stroke="#f4e7c3" stroke-width="2.8"/>
