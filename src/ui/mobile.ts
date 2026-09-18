@@ -131,10 +131,10 @@ function sourceActionChips(): SVGGElement[] {
 }
 
 function actionLabel(source: Element): string {
-  if (source.classList.contains('bolster')) return '증원';
-  if (source.classList.contains('tactic')) return '전술';
-  if (source.classList.contains('control')) return '점령';
-  return source.textContent?.trim() || '행동';
+  if (source.classList.contains('bolster')) return 'Bolster';
+  if (source.classList.contains('tactic')) return 'Tactic';
+  if (source.classList.contains('control')) return 'Control';
+  return source.textContent?.trim() || 'Action';
 }
 
 function actionClass(source: Element): string {
@@ -182,9 +182,9 @@ function syncBoardUnitActionOverlay(): void {
   }
 
   const mobile = isMobileUi();
-  const buttonWidth = mobile ? 112 : 76;
-  const gap = mobile ? 10 : 7;
-  const height = mobile ? 72 : 44;
+  const buttonWidth = mobile ? 84 : 64;
+  const gap = mobile ? 6 : 5;
+  const height = mobile ? 48 : 34;
   const totalWidth = sources.length * buttonWidth + Math.max(0, sources.length - 1) * gap;
   const viewLeft = 54;
   const viewRight = 906;
@@ -210,7 +210,7 @@ function syncBoardUnitActionOverlay(): void {
   const row = document.createElementNS(XHTML_NS, 'div') as HTMLDivElement;
   row.className = 'board-unit-action-buttons';
   row.setAttribute('role', 'group');
-  row.setAttribute('aria-label', '선택한 유닛 행동');
+  row.setAttribute('aria-label', 'Selected Unit actions');
 
   for (const source of sources) {
     const key = source.dataset.boardKey;
