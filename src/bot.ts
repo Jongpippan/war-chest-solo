@@ -126,7 +126,10 @@ function positionScore(state: GameState, player: PlayerId): number {
   const centerPressure = state.boardUnits
     .filter((u) => u.owner === player)
     .reduce((n, u) => n + Math.max(0, 3 - strategicLocationDistance(state, player, u.hex)), 0);
-  let score = (myLocations - foeLocations) * 240 + (myStrength - foeStrength) * 32 + centerPressure * 8;
+  // Raw stack height matters, but it must not dominate positional play.
+  // A high coefficient here made Hard repeatedly Bolster because every added
+  // coin looked like a large permanent material gain.
+  let score = (myLocations - foeLocations) * 240 + (myStrength - foeStrength) * 20 + centerPressure * 10;
   if (state.winner === player) score += 100000;
   if (state.winner === foe) score -= 100000;
   return score;
@@ -146,6 +149,41 @@ function hardScore(state: GameState, action: ActionCandidate): number {
     if (moved && moved.strength === 1) {
       const threats = simulated.boardUnits.filter((u) => u.owner !== action.player && distance(u.hex, moved.hex) === 1).length;
       score -= threats * 24;
+    }
+
+    // Bolster is durability, not damage. It should be a situational defensive
+    // choice rather than the default use of every matching coin.
+    if (action.kind === 'BOLSTER') {
+      const unit = getUnit(state, action.payload.unitId!);
+      if (unit) {
+        const adjacentEnemies = state.boardUnits.filter((u) => u.owner !== action.player && distance(unit.hex, u.hex) === 1).length;
+        const nearbyEnemies = state.boardUnits.filter((u) => u.owner !== action.player && distance(unit.hex, u.hex) <= 2).length;
+        score -= 78;
+        score += adjacentEnemies * 48 + Math.max(0, nearbyEnemies - adjacentEnemies) * 12;
+        if (unit.strength >= 2) score -= (unit.strength - 1) * 42;
+        if (strategicLocationDistance(state, action.player, unit.hex) > 0 && adjacentEnemies === 0) score -= 26;
+
+        const bolsterWord = action.player === 'bot' ? '봇의' : '당신의';
+        const recentBolsters = state.log
+          .slice(-10)
+          .filter((line) => line.includes(bolsterWord) && line.includes('강화되어'))
+          .length;
+        score -= recentBolsters * 34;
+      }
+    }
+
+    // Prefer actions that actually change the contest for Locations or enemy
+    // pieces when their base evaluation is otherwise close.
+    if (action.kind === 'CONTROL' || action.kind === 'FREE_CONTROL') score += 90;
+    if (action.kind === 'ATTACK' || action.kind === 'FREE_ATTACK' ||
+        action.kind === 'TACTIC_ARCHER' || action.kind === 'TACTIC_CROSSBOWMAN' ||
+        action.kind === 'TACTIC_CAVALRY' || action.kind === 'TACTIC_LANCER' ||
+        action.kind === 'TACTIC_MARSHALL') score += 28;
+    if (action.kind === 'MOVE' || action.kind === 'FREE_MOVE' ||
+        action.kind === 'TACTIC_LIGHT_CAVALRY' || action.kind === 'TACTIC_ROYAL_GUARD' ||
+        action.kind === 'TACTIC_ENSIGN') {
+      const movingId = action.payload.grantedUnitId ?? action.payload.unitId;
+      if (moveValue(state, movingId, action.payload.destination) > 0) score += 24;
     }
   } catch {
     score -= 5000;
