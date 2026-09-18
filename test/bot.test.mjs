@@ -19,3 +19,36 @@ for (const difficulty of ['EASY', 'NORMAL', 'HARD']) {
     assert.deepEqual(stateSanity(s), []);
   });
 }
+
+
+test('HARD bot advances instead of reflexively Bolstering a safe rear Unit', () => {
+  const s = createGame(H, H, 'bot');
+  s.activePlayer = 'bot';
+  s.players.bot.hand = ['SWORDSMAN'];
+  s.players.bot.bag = [];
+  s.players.bot.discard = [];
+  s.boardUnits = [
+    { id: 'bot-sword-safe', owner: 'bot', type: 'SWORDSMAN', hex: '-1,-2', strength: 1 },
+  ];
+
+  const decision = chooseBotDecision(s, 'HARD');
+  assert(decision);
+  assert.notEqual(decision.action.kind, 'BOLSTER', 'Hard should not Bolster a safe rear Unit when it can make positional progress');
+});
+
+test('HARD bot increasingly discounts repeated Bolsters', () => {
+  const s = createGame(H, H, 'bot');
+  s.activePlayer = 'bot';
+  s.players.bot.hand = ['SWORDSMAN'];
+  s.players.bot.bag = [];
+  s.players.bot.discard = [];
+  s.boardUnits = [
+    { id: 'bot-sword-stack', owner: 'bot', type: 'SWORDSMAN', hex: '-1,-2', strength: 2 },
+  ];
+  s.log.push('봇의 검병이(가) 강화되어 스택 2이 되었습니다.');
+  s.log.push('봇의 검병이(가) 강화되어 스택 3이 되었습니다.');
+
+  const decision = chooseBotDecision(s, 'HARD');
+  assert(decision);
+  assert.notEqual(decision.action.kind, 'BOLSTER', 'Hard should not keep stacking an already Bolstered safe Unit');
+});
