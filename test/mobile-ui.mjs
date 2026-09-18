@@ -58,10 +58,20 @@ async function assertBolsterIsAtomic(page, viewportName) {
   await selectLightCavalry(page);
 
   const labels = await page.locator('.board-unit-action-button').allTextContents();
-  assert.ok(labels.includes('증원'), `${viewportName}: Bolster must appear above the selected Unit`);
-  assert.ok(labels.includes('전술'), `${viewportName}: Tactic must appear above Light Cavalry`);
+  assert.ok(labels.includes('Bolster'), `${viewportName}: Bolster must appear above the selected Unit`);
+  assert.ok(labels.includes('Tactic'), `${viewportName}: Tactic must appear above Light Cavalry`);
   assert.equal(await page.locator('.board-unit-action-button.bolster').isVisible(), true, `${viewportName}: battlefield Bolster button must be visible`);
   assert.equal(await page.locator('.context-unit-actions').count(), 0, `${viewportName}: duplicated HUD action bar must not be rendered`);
+
+  // Selected Unit is a toggle: click it again to collapse the action controls,
+  // then select it once more before exercising Bolster.
+  const selectedUnit = page.locator('.unit-token.interaction-selected[data-board-key]').first();
+  assert.equal(await selectedUnit.count(), 1, `${viewportName}: selected Unit must remain clickable for toggle-off`);
+  await selectedUnit.click();
+  await page.waitForFunction(() => !document.querySelector('.board-unit-action-overlay'));
+  assert.equal(await page.locator('.board-unit-action-overlay').count(), 0, `${viewportName}: second Unit click must hide action buttons`);
+  await page.locator('.unit-token[data-unit-type="LIGHT_CAVALRY"][data-board-key]').first().click();
+  await page.waitForSelector('.board-unit-action-overlay', { state: 'attached' });
 
   const position = await page.locator('.board-unit-action-overlay').evaluate((overlay) => ({
     y: Number(overlay.getAttribute('y')),
