@@ -778,10 +778,22 @@ function renderControlMarkers(id: PlayerId): string {
 function renderHandZone(id: PlayerId): string {
   if (!state) return '';
   const p = state.players[id];
-  const coins = p.hand.map((coin, index) => id === 'human'
-    ? tableCoin(coin, { owner: 'human', index, className: index === selectedCoinIndex ? 'selected' : '' })
-    : tableCoin(null, { faceUp: false }));
-  return `<div class="resource-zone hand-zone"><div class="resource-label"><span>HAND</span><b>${p.hand.length}</b></div><div class="coin-fan">${coins.join('') || '<span class="empty-zone">EMPTY</span>'}</div></div>`;
+  const forced = id === 'human' && state.forcedCoin?.player === 'human'
+    ? state.forcedCoin.coin
+    : null;
+  const coins = p.hand.map((coin, index) => {
+    if (id !== 'human') return tableCoin(null, { faceUp: false });
+    // A Warrior Priest draw must be used immediately, so normal Hand coins stay
+    // visible for orientation but cannot be selected until the forced coin resolves.
+    return forced
+      ? tableCoin(coin, { className: 'hand-coin-locked' })
+      : tableCoin(coin, { owner: 'human', index, className: index === selectedCoinIndex ? 'selected' : '' });
+  });
+  const forcedMarkup = forced
+    ? `<span class="forced-draw-slot" aria-live="polite"><span class="forced-draw-copy"><small>WARRIOR PRIEST</small><b>USE NOW</b></span>${tableCoin(forced, { className: 'forced-draw-coin selected' })}</span>`
+    : '';
+  const contents = `${forcedMarkup}${coins.join('')}`;
+  return `<div class="resource-zone hand-zone ${forced ? 'has-forced-draw' : ''}"><div class="resource-label"><span>HAND</span><b>${p.hand.length}${forced ? ' +1' : ''}</b></div><div class="coin-fan">${contents || '<span class="empty-zone">EMPTY</span>'}</div></div>`;
 }
 
 function renderBagZone(id: PlayerId): string {
@@ -925,6 +937,15 @@ function boardTargetClass(key: string, ui: ReturnType<typeof boardInteractionSta
   return `${ui.nextKeys.has(key) ? 'actionable interaction-target' : ''} ${ui.selectedKeys.has(key) ? 'interaction-selected' : ''} ${attack ? 'attack-target' : ''} ${deploy ? 'deploy-target' : ''} ${move ? 'move-target' : ''}`;
 }
 
+function pendingBoardUnitKey(current: GameState): string | null {
+  const pending = current.pending;
+  if (!pending || pending.player !== 'human') return null;
+  const unitId = pending.kind === 'FOOTMAN_QUEUE'
+    ? pending.unitIds[pending.index]
+    : pending.unitId;
+  return unitId && current.boardUnits.some((unit) => unit.id === unitId) ? `unit:${unitId}` : null;
+}
+
 function describeActionAnimation(before: GameState, action: ActionCandidate): ActionAnimation {
   const actingId = (action.kind === 'TACTIC_ENSIGN' || action.kind === 'TACTIC_MARSHALL')
     ? action.payload.grantedUnitId
@@ -954,7 +975,8 @@ async function executeHumanAction(action: ActionCandidate): Promise<void> {
     actionAnimating = true;
     executeAction(state, action);
     selectedCoinIndex = 0;
-    boardPath = [];
+    const pendingUnitKey = pendingBoardUnitKey(state);
+    boardPath = pendingUnitKey ? [pendingUnitKey] : [];
     collapsedUnitActionsFor = null;
     saveState();
     renderGame();
@@ -1034,9 +1056,13 @@ function renderInteractionHud(actions: ActionCandidate[]): string {
   const coin = selectedHumanCoin();
   const info = coin ? infoForCoin(coin) : null;
   const skip = actions.find((a) => a.kind === 'SKIP_ABILITY');
-  const stepCopy = boardPath.length
-    ? 'Continue by choosing the highlighted Unit or hex.'
-    : 'Select a Coin, then use highlighted Units, Locations and hexes directly.';
+  const stepCopy = state.pending?.kind === 'BERSERKER_EXTRA'
+    ? 'BERSERKER: choose a highlighted Move, Attack or Control. Using it removes 1 Coin from the Berserker stack.'
+    : state.forcedCoin?.player === 'human'
+      ? 'WARRIOR PRIEST: the +1 drawn Coin is forced. Use the highlighted actions for that Coin now.'
+      : boardPath.length
+        ? 'Continue by choosing the highlighted Unit or hex.'
+        : 'Select a Coin, then use highlighted Units, Locations and hexes directly.';
   return `<div class="interaction-hud compact-hud">
     <div class="selected-coin-hud">${coin && info ? `<span class="table-coin front static" style="--coin-accent:${info.accent}" data-unit-type="${coin}"><span class="table-coin-inner">${unitIconSvg(coin)}</span></span><div><small>SELECTED COIN</small><strong>${esc(coinLabel(coin))}</strong></div>` : '<div><small>SELECTED COIN</small><strong>NONE</strong></div>'}</div>
     <div class="interaction-copy"><strong>Battlefield input</strong><span>${stepCopy}</span><div class="interaction-legend">${gameTerm('Deploy')} · ${gameTerm('Maneuver')} · ${gameTerm('Bolster')} · ${gameTerm('Tactic')} · ${gameTerm('Control')}</div></div>
