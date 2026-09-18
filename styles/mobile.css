@@ -23,7 +23,7 @@
   height: 100%;
   display: flex;
   align-items: stretch;
-  gap: 5px;
+  gap: 3px;
   padding: 1px;
   pointer-events: auto;
 }
@@ -31,14 +31,14 @@
   flex: 1 1 0;
   min-width: 0;
   height: 100%;
-  border: 2px solid rgba(255, 244, 217, .82);
-  border-radius: 11px;
-  padding: 0 7px;
+  border: 1px solid rgba(255, 244, 217, .86);
+  border-radius: 8px;
+  padding: 0 4px;
   color: #fff8e8;
   background: #3b3025;
   box-shadow: 0 7px 18px rgba(39, 27, 17, .32);
-  font-size: 10px;
-  font-weight: 950;
+  font-size: 8px;
+  font-weight: 900;
   line-height: 1;
   white-space: nowrap;
   cursor: pointer;
@@ -127,13 +127,13 @@
 
   /* These dimensions are in SVG user units and are intentionally large: the
      whole board scales down on phones, so this yields finger-sized controls. */
-  .board-unit-action-buttons { gap: 6px; padding: 2px; }
+  .board-unit-action-buttons { gap: 4px; padding: 1px; }
   .board-unit-action-button {
-    border-width: 2px;
-    border-radius: 12px;
-    padding: 0 8px;
-    font-size: 14px;
-    box-shadow: 0 9px 22px rgba(39, 27, 17, .36);
+    border-width: 1.5px;
+    border-radius: 9px;
+    padding: 0 5px;
+    font-size: 10px;
+    box-shadow: 0 5px 14px rgba(39, 27, 17, .32);
   }
 
   /* Touch info card: the next tap anywhere outside gameplay dismisses it and is
