@@ -67,17 +67,24 @@ async function assertBolsterIsAtomic(page, viewportName) {
   // then select it once more before exercising Bolster.
   const selectedUnit = page.locator('.unit-token.interaction-selected[data-board-key]').first();
   assert.equal(await selectedUnit.count(), 1, `${viewportName}: selected Unit must remain clickable for toggle-off`);
+  const moveTargetsBeforeToggle = await page.locator('.hex-cell.move-target[data-board-key^="hex:"]').count();
+  assert.ok(moveTargetsBeforeToggle > 0, `${viewportName}: selected Unit must expose normal Move targets`);
+
   await selectedUnit.click();
   await page.waitForFunction(() => !document.querySelector('.board-unit-action-overlay'));
-  assert.equal(await page.locator('.board-unit-action-overlay').count(), 0, `${viewportName}: second Unit click must hide action buttons`);
-  await page.locator('.unit-token[data-unit-type="LIGHT_CAVALRY"][data-board-key]').first().click();
+  assert.equal(await page.locator('.board-unit-action-overlay').count(), 0, `${viewportName}: second Unit click must hide only the special-action buttons`);
+  assert.equal(await page.locator('.unit-token.interaction-selected[data-unit-type="LIGHT_CAVALRY"]').count(), 1, `${viewportName}: toggling chips must keep the Unit selected`);
+  assert.equal(await page.locator('.hex-cell.move-target[data-board-key^="hex:"]').count(), moveTargetsBeforeToggle, `${viewportName}: Move targets must remain available while chips are hidden`);
+
+  await selectedUnit.click();
   await page.waitForSelector('.board-unit-action-overlay', { state: 'attached' });
 
   const position = await page.locator('.board-unit-action-overlay').evaluate((overlay) => ({
     y: Number(overlay.getAttribute('y')),
+    height: Number(overlay.getAttribute('height')),
     unitY: Number(document.querySelector('.unit-token[data-unit-type="LIGHT_CAVALRY"] circle')?.getAttribute('cy')),
   }));
-  assert.ok(position.y < position.unitY, `${viewportName}: action buttons must be positioned above the Unit token`);
+  assert.ok(position.y < position.unitY && position.y + position.height > position.unitY - 24, `${viewportName}: action buttons must overlap the selected Unit token`);
 
   // Deliberately emit two click attempts against the same visible control. The
   // interaction layer must consume the first one immediately and make the
