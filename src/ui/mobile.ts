@@ -192,7 +192,9 @@ function syncBoardUnitActionOverlay(): void {
   const viewRight = 906;
   const viewTop = 58;
   const x = Math.max(viewLeft + 4, Math.min(cx - totalWidth / 2, viewRight - totalWidth - 4));
-  const y = Math.max(viewTop + 4, cy - height / 2 - 5);
+  // Overlap the upper half of the Unit while leaving the token centre/bottom
+  // exposed so clicking the Unit again can toggle these chips.
+  const y = Math.max(viewTop + 4, cy - height - 4);
   const signature = `${unitId}:${mobile ? 'm' : 'd'}:${sources.map((source) => source.dataset.boardKey ?? '').join('|')}:${x}:${y}`;
 
   if (existing?.dataset.signature === signature) return;
