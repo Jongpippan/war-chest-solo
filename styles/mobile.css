@@ -16,7 +16,7 @@
 
 .board-unit-action-overlay {
   overflow: visible;
-  pointer-events: auto;
+  pointer-events: none;
 }
 .board-unit-action-buttons {
   width: 100%;
@@ -25,7 +25,7 @@
   align-items: stretch;
   gap: 3px;
   padding: 1px;
-  pointer-events: auto;
+  pointer-events: none;
 }
 .board-unit-action-button {
   flex: 1 1 0;
