@@ -218,3 +218,35 @@ small,
   .supply-stats span { font-size: 7px !important; }
   .supply-stats b { font-size: 9px !important; }
 }
+
+
+/* Keep the battlefield viewport geometrically stable while turn/action copy
+   changes. Action toast is an overlay and the HUD gets a fixed desktop row, so
+   animations cannot make the board appear to zoom in or out. */
+@media (min-width: 761px) {
+  .board-stage,
+  .board-panel,
+  #boardHost {
+    min-height: 0 !important;
+  }
+
+  .board-panel {
+    grid-template-rows: minmax(0, 1fr) 62px !important;
+  }
+
+  #boardHost {
+    height: 100% !important;
+  }
+
+  .interaction-hud {
+    min-height: 62px !important;
+    max-height: 62px !important;
+    overflow: hidden;
+  }
+
+  .action-playback-toast {
+    position: absolute !important;
+    inset: 10px auto auto 50% !important;
+    margin: 0 !important;
+  }
+}
