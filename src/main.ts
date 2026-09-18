@@ -48,6 +48,7 @@ let lastBotThought: BotThought | null = null;
 let botThoughtHistory: BotThought[] = [];
 let utilityPanel: 'analysis' | 'bot' | 'log' | null = null;
 let boardPath: string[] = [];
+let collapsedUnitActionsFor: string | null = null;
 
 type ActionAnimation = {
   player: PlayerId;
@@ -390,6 +391,7 @@ function clearSave(): void {
 function resetSessionUi(): void {
   selectedCoinIndex = 0;
   boardPath = [];
+  collapsedUnitActionsFor = null;
   previewHexes.clear();
   undoStack = [];
   lastBotThought = null;
@@ -953,6 +955,7 @@ async function executeHumanAction(action: ActionCandidate): Promise<void> {
     executeAction(state, action);
     selectedCoinIndex = 0;
     boardPath = [];
+    collapsedUnitActionsFor = null;
     saveState();
     renderGame();
     await sleep(960);
@@ -971,11 +974,12 @@ async function executeHumanAction(action: ActionCandidate): Promise<void> {
 }
 
 function handleBoardKey(key: string, actions: ActionCandidate[]): void {
-  // Clicking the currently selected Unit again is a true toggle: collapse its
-  // Bolster / Tactic / Control popover and return to the initial battlefield input.
+  // Clicking the currently selected Unit again only toggles its compact
+  // Bolster / Tactic / Control popover. The Unit remains selected so normal
+  // Move / Attack targets stay highlighted and clickable.
   if (boardPath.length === 1 && boardPath[0] === key && key.startsWith('unit:')) {
-    boardPath = [];
-    previewHexes.clear();
+    const unitId = key.slice(5);
+    collapsedUnitActionsFor = collapsedUnitActionsFor === unitId ? null : unitId;
     renderGame();
     return;
   }
@@ -994,6 +998,7 @@ function handleBoardKey(key: string, actions: ActionCandidate[]): void {
     return;
   }
   boardPath = nextPath;
+  if (boardPath.length === 1 && boardPath[0].startsWith('unit:')) collapsedUnitActionsFor = null;
   // Only preview the hexes that are actually clickable on the next step.
   // Multi-step Tactics used to paint the entire route yellow, which made
   // non-clickable intermediate/final cells look actionable.
@@ -1165,7 +1170,7 @@ function renderBoardSvg(actions: ActionCandidate[] = []): string {
       if (unit.strength > 1) {
         stackBadgeLayer.push(`<g class="stack-badge" data-stack-badge="${unit.id}" pointer-events="none"><circle cx="${x + 23}" cy="${y - 22}" r="12.5" fill="#fff5db" stroke="#453722" stroke-width="1.8"/><text x="${x + 23}" y="${y - 18}" text-anchor="middle" class="stack-count">${unit.strength}</text></g>`);
       }
-      if (unit.owner === 'human' && ui.selectedKeys.has(unitKey)) {
+      if (unit.owner === 'human' && ui.selectedKeys.has(unitKey) && collapsedUnitActionsFor !== unit.id) {
         const choices = [
           ['special:BOLSTER', 'BOLSTER', 'bolster'],
           ['special:TACTIC', 'TACTIC', 'tactic'],
@@ -1364,6 +1369,7 @@ function undoLastHumanTurn(): void {
   botThoughtHistory.pop();
   selectedCoinIndex = 0;
   boardPath = [];
+  collapsedUnitActionsFor = null;
   previewHexes.clear();
   saveState();
   render();
@@ -1394,6 +1400,7 @@ function renderGame(): void {
   document.querySelectorAll<HTMLButtonElement>('[data-hand-index]').forEach((btn) => btn.addEventListener('click', () => {
     selectedCoinIndex = Number(btn.dataset.handIndex ?? 0);
     boardPath = [];
+    collapsedUnitActionsFor = null;
     previewHexes.clear();
     renderGame();
   }));
@@ -1421,6 +1428,7 @@ function renderGame(): void {
   });
   document.querySelector('#cancelBoardPath')?.addEventListener('click', () => {
     boardPath = [];
+    collapsedUnitActionsFor = null;
     previewHexes.clear();
     renderGame();
   });
