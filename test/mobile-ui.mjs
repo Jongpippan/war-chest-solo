@@ -130,6 +130,105 @@ async function assertMoveIsAtomic(page, viewportName) {
   assert.equal(saved?.players?.human?.hand?.length, 0, `${viewportName}: Move must consume exactly the selected hand coin`);
 }
 
+
+async function seedBerserkerGame(page) {
+  await page.evaluate(async () => {
+    const { createGame } = await import('./dist/engine.js');
+    const { UNIT_DEFS } = await import('./dist/data.js');
+    const state = createGame(
+      ['BERSERKER', 'WARRIOR_PRIEST', 'PIKEMAN', 'LIGHT_CAVALRY'],
+      ['CAVALRY', 'KNIGHT', 'SCOUT', 'SWORDSMAN'],
+      'human',
+    );
+    state.activePlayer = 'human';
+    state.initiative = 'human';
+    state.players.human.hand = ['BERSERKER'];
+    state.players.human.bag = ['ROYAL'];
+    state.players.human.discard = [];
+    state.players.human.removed = [];
+    state.players.bot.hand = [];
+    state.players.bot.bag = ['ROYAL'];
+    state.players.bot.discard = [];
+    state.players.bot.removed = [];
+
+    for (const type of state.players.human.units) state.players.human.supply[type] = UNIT_DEFS[type].coinCount;
+    state.players.human.supply.BERSERKER = UNIT_DEFS.BERSERKER.coinCount - 3;
+    for (const type of state.players.bot.units) state.players.bot.supply[type] = UNIT_DEFS[type].coinCount;
+
+    state.boardUnits = [
+      { id: 'u-test-berserker', owner: 'human', type: 'BERSERKER', hex: '0,0', strength: 2 },
+    ];
+    localStorage.setItem('war-chest-solo-local-v2', JSON.stringify(state));
+  });
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.locator('#resumeBtn').click();
+  await page.waitForSelector('.battlefield');
+  assert.equal(await page.locator('.debug-warning').count(), 0, 'Berserker browser seed must satisfy engine sanity checks');
+}
+
+async function assertBerserkerFollowUpIsImmediate(page, viewportName) {
+  await seedBerserkerGame(page);
+  const unit = page.locator('.unit-token[data-unit-type="BERSERKER"][data-board-key]').first();
+  await unit.click();
+  const firstMove = page.locator('.hex-cell.move-target[data-board-key^="hex:"]').first();
+  assert.equal(await firstMove.isVisible(), true, `${viewportName}: Berserker must have an initial Move target`);
+  await firstMove.click();
+
+  await page.waitForFunction(() => {
+    const saved = JSON.parse(localStorage.getItem('war-chest-solo-local-v2') || 'null');
+    return saved?.pending?.kind === 'BERSERKER_EXTRA';
+  });
+  await page.waitForFunction(() => document.querySelectorAll('.hex-cell.move-target[data-board-key^="hex:"]').length > 0);
+
+  assert.equal(await page.locator('.unit-token.interaction-selected[data-unit-type="BERSERKER"]').count(), 1, `${viewportName}: Berserker must stay selected for its extra Maneuver`);
+  assert.ok(await page.locator('.hex-cell.move-target[data-board-key^="hex:"]').count() > 0, `${viewportName}: extra Move targets must appear without reselecting Berserker`);
+  assert.equal(await page.locator('#skipAbilityBtn').isVisible(), true, `${viewportName}: Berserker extra Maneuver must expose Skip Ability`);
+}
+
+async function seedForcedWarriorPriestDraw(page) {
+  await page.evaluate(async () => {
+    const { createGame } = await import('./dist/engine.js');
+    const { UNIT_DEFS } = await import('./dist/data.js');
+    const state = createGame(
+      ['WARRIOR_PRIEST', 'PIKEMAN', 'CROSSBOWMAN', 'LIGHT_CAVALRY'],
+      ['CAVALRY', 'KNIGHT', 'SCOUT', 'SWORDSMAN'],
+      'human',
+    );
+    state.activePlayer = 'human';
+    state.initiative = 'human';
+    state.players.human.hand = [];
+    state.players.human.bag = ['ROYAL'];
+    state.players.human.discard = [];
+    state.players.human.removed = [];
+    state.players.bot.hand = [];
+    state.players.bot.bag = ['ROYAL'];
+    state.players.bot.discard = [];
+    state.players.bot.removed = [];
+
+    for (const type of state.players.human.units) state.players.human.supply[type] = UNIT_DEFS[type].coinCount;
+    state.players.human.supply.PIKEMAN = UNIT_DEFS.PIKEMAN.coinCount - 1;
+    for (const type of state.players.bot.units) state.players.bot.supply[type] = UNIT_DEFS[type].coinCount;
+
+    state.boardUnits = [];
+    state.forcedCoin = { player: 'human', coin: 'PIKEMAN', source: 'WARRIOR_PRIEST' };
+    localStorage.setItem('war-chest-solo-local-v2', JSON.stringify(state));
+  });
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.locator('#resumeBtn').click();
+  await page.waitForSelector('.battlefield');
+  assert.equal(await page.locator('.debug-warning').count(), 0, 'Warrior Priest browser seed must satisfy engine sanity checks');
+}
+
+async function assertWarriorPriestDrawVisible(page, viewportName) {
+  await seedForcedWarriorPriestDraw(page);
+  const slot = page.locator('.forced-draw-slot');
+  assert.equal(await slot.isVisible(), true, `${viewportName}: Warrior Priest forced Coin must be visible in Hand`);
+  assert.match(await slot.textContent(), /WARRIOR PRIEST/);
+  assert.match(await slot.textContent(), /USE NOW/);
+  assert.equal(await slot.locator('[data-unit-type="PIKEMAN"]').count(), 1, `${viewportName}: forced drawn Coin must show its actual Unit face`);
+  assert.equal(await page.locator('.selected-coin-hud [data-unit-type="PIKEMAN"]').count(), 1, `${viewportName}: forced Coin must also drive battlefield input`);
+}
+
 try {
   const mobileContext = await browser.newContext({
     viewport: { width: 390, height: 844 },
@@ -170,6 +269,8 @@ try {
   assert.equal(await page.locator('.mobile-bot-last-action').isVisible(), true, 'last bot action panel must be visible on mobile');
   await assertBolsterIsAtomic(page, 'mobile');
   await assertMoveIsAtomic(page, 'mobile');
+  await assertBerserkerFollowUpIsImmediate(page, 'mobile');
+  await assertWarriorPriestDrawVisible(page, 'mobile');
   await mobileContext.close();
 
   const desktopContext = await browser.newContext({ viewport: { width: 1440, height: 900 } });
@@ -181,6 +282,8 @@ try {
   await seedLightCavalryGame(desktopPage);
   await assertBolsterIsAtomic(desktopPage, 'desktop');
   await assertMoveIsAtomic(desktopPage, 'desktop');
+  await assertBerserkerFollowUpIsImmediate(desktopPage, 'desktop');
+  await assertWarriorPriestDrawVisible(desktopPage, 'desktop');
   assert.equal(await desktopPage.locator('.mobile-bot-last-action').count(), 0, 'mobile-only bot summary must stay off desktop');
   await desktopContext.close();
 
