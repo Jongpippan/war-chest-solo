@@ -182,15 +182,17 @@ function syncBoardUnitActionOverlay(): void {
   }
 
   const mobile = isMobileUi();
-  const buttonWidth = mobile ? 84 : 64;
-  const gap = mobile ? 6 : 5;
-  const height = mobile ? 48 : 34;
+  // Keep these chips deliberately tight and overlapping the selected Unit.
+  // They are contextual controls, not a floating toolbar above the board.
+  const buttonWidth = mobile ? 54 : 48;
+  const gap = mobile ? 4 : 3;
+  const height = mobile ? 30 : 26;
   const totalWidth = sources.length * buttonWidth + Math.max(0, sources.length - 1) * gap;
   const viewLeft = 54;
   const viewRight = 906;
   const viewTop = 58;
   const x = Math.max(viewLeft + 4, Math.min(cx - totalWidth / 2, viewRight - totalWidth - 4));
-  const y = Math.max(viewTop + 4, cy - 33 - height - 10);
+  const y = Math.max(viewTop + 4, cy - height / 2 - 5);
   const signature = `${unitId}:${mobile ? 'm' : 'd'}:${sources.map((source) => source.dataset.boardKey ?? '').join('|')}:${x}:${y}`;
 
   if (existing?.dataset.signature === signature) return;
