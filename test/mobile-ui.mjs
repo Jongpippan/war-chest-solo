@@ -297,7 +297,7 @@ async function assertRoyalGuardTacticSelectable(page, viewportName) {
 async function assertRoyalGuardUnavailableReason(page, viewportName) {
   // From the centre, the two starting controlled Locations are 3 spaces away.
   // The Guard must still be selectable so the UI explains why the Tactic cannot fire.
-  await seedRoyalGuardGame(page, '0,0');
+  await seedRoyalGuardGame(page, '1,2');
   await page.locator('.hand-zone [data-hand-index][data-unit-type="ROYAL"]').first().click();
 
   const guard = page.locator('.unit-token[data-unit-type="ROYAL_GUARD"][data-board-key]').first();
@@ -305,9 +305,43 @@ async function assertRoyalGuardUnavailableReason(page, viewportName) {
   await guard.click();
 
   assert.equal(await page.locator('.unit-token.interaction-selected[data-unit-type="ROYAL_GUARD"]').count(), 1, `${viewportName}: unavailable Royal Guard Tactic should still select the piece`);
-  const copy = await page.locator('.interaction-copy').textContent();
-  assert.match(copy ?? '', /no reachable empty controlled Location/i, `${viewportName}: UI must explain why Royal Guard Tactic is unavailable`);
+  const guide = page.locator('.interaction-copy.royal-guard-guide > span');
+  assert.equal(await guide.isVisible(), true, `${viewportName}: Royal Guard availability reason must stay visible`);
+  const copy = await guide.textContent();
+  assert.match(copy ?? '', /2칸 안에 도달 가능한 빈 내 Location이 없습니다/i, `${viewportName}: UI must explain why Royal Guard Tactic is unavailable`);
   assert.equal(await page.locator('.hex-cell.move-target[data-board-key^="hex:"]').count(), 0, `${viewportName}: no illegal Royal Guard destination may be highlighted`);
+}
+
+
+async function assertNarrowMouseHoverStable(browser) {
+  const context = await browser.newContext({ viewport: { width: 585, height: 477 } });
+  const page = await context.newPage();
+  await page.goto(baseUrl, { waitUntil: 'networkidle' });
+  await seedRoyalGuardGame(page, '1,2');
+  await page.locator('.hand-zone [data-hand-index][data-unit-type="ROYAL"]').first().click();
+
+  const guard = page.locator('.unit-token[data-unit-type="ROYAL_GUARD"][data-board-key]').first();
+  const box = await guard.boundingBox();
+  assert.ok(box, 'narrow desktop: Royal Guard must have a hoverable box');
+
+  await guard.hover();
+  await page.waitForTimeout(90);
+  assert.equal(await page.locator('#unitTooltip').isVisible(), true, 'narrow desktop: Unit card must remain visible on mouse hover');
+  assert.equal(await guard.evaluate((element) => getComputedStyle(element).cursor), 'pointer', 'narrow desktop: selectable Royal Guard cursor must remain pointer');
+
+  const points = [
+    [box.x + box.width * 0.42, box.y + box.height * 0.45],
+    [box.x + box.width * 0.58, box.y + box.height * 0.52],
+    [box.x + box.width * 0.5, box.y + box.height * 0.38],
+  ];
+  for (const [x, y] of points) {
+    await page.mouse.move(x, y);
+    await page.waitForTimeout(35);
+    assert.equal(await page.locator('#unitTooltip').isVisible(), true, 'narrow desktop: tooltip must not flash off while crossing SVG child paths');
+    assert.equal(await guard.evaluate((element) => getComputedStyle(element).cursor), 'pointer', 'narrow desktop: cursor must not flash back to default');
+  }
+
+  await context.close();
 }
 
 try {
@@ -371,6 +405,7 @@ try {
   await assertRoyalGuardUnavailableReason(desktopPage, 'desktop');
   assert.equal(await desktopPage.locator('.mobile-bot-last-action').count(), 0, 'mobile-only bot summary must stay off desktop');
   await desktopContext.close();
+  await assertNarrowMouseHoverStable(browser);
 
   console.log('responsive atomic-action UI regression checks passed');
 } finally {
