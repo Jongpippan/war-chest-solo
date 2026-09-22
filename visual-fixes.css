@@ -376,3 +376,13 @@ small,
     white-space: normal !important;
   }
 }
+
+
+/* v0.15 stable battlefield hover target
+   SVG child paths can briefly become the hit target independently of the
+   parent <g>. Force one cursor across the entire clickable token so the cursor
+   cannot flash between pointer/default while the Unit card is open. */
+.unit-token[data-board-key],
+.unit-token[data-board-key] * {
+  cursor: pointer !important;
+}
