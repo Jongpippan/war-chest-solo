@@ -229,6 +229,70 @@ async function assertWarriorPriestDrawVisible(page, viewportName) {
   assert.equal(await page.locator('.selected-coin-hud [data-unit-type="PIKEMAN"]').count(), 1, `${viewportName}: forced Coin must also drive battlefield input`);
 }
 
+
+async function seedRoyalGuardGame(page) {
+  await page.evaluate(async () => {
+    const { createGame } = await import('./dist/engine.js');
+    const { UNIT_DEFS } = await import('./dist/data.js');
+    const state = createGame(
+      ['ROYAL_GUARD', 'ARCHER', 'FOOTMAN', 'PIKEMAN'],
+      ['CAVALRY', 'KNIGHT', 'SCOUT', 'SWORDSMAN'],
+      'human',
+    );
+    state.activePlayer = 'human';
+    state.initiative = 'human';
+    state.players.human.hand = ['ROYAL'];
+    state.players.human.bag = [];
+    state.players.human.discard = [];
+    state.players.human.removed = [];
+    state.players.bot.hand = [];
+    state.players.bot.bag = ['ROYAL'];
+    state.players.bot.discard = [];
+    state.players.bot.removed = [];
+
+    for (const type of state.players.human.units) state.players.human.supply[type] = UNIT_DEFS[type].coinCount;
+    state.players.human.supply.ROYAL_GUARD = UNIT_DEFS.ROYAL_GUARD.coinCount - 1;
+    for (const type of state.players.bot.units) state.players.bot.supply[type] = UNIT_DEFS[type].coinCount;
+
+    state.boardUnits = [
+      { id: 'u-test-royal-guard', owner: 'human', type: 'ROYAL_GUARD', hex: '0,2', strength: 1 },
+    ];
+    localStorage.setItem('war-chest-solo-local-v2', JSON.stringify(state));
+  });
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.locator('#resumeBtn').click();
+  await page.waitForSelector('.battlefield');
+  assert.equal(await page.locator('.debug-warning').count(), 0, 'Royal Guard browser seed must satisfy engine sanity checks');
+}
+
+async function assertRoyalGuardTacticSelectable(page, viewportName) {
+  await seedRoyalGuardGame(page);
+
+  const royalCoin = page.locator('.hand-zone [data-hand-index][data-unit-type="ROYAL"]').first();
+  assert.equal(await royalCoin.isVisible(), true, `${viewportName}: Royal Coin must be selectable from Hand`);
+  await royalCoin.click();
+
+  const guard = page.locator('.unit-token[data-unit-type="ROYAL_GUARD"][data-board-key]').first();
+  assert.equal(await guard.isVisible(), true, `${viewportName}: Royal Guard must be selectable while Royal Coin is selected`);
+  await guard.click();
+
+  await page.waitForSelector('.board-unit-action-button.tactic', { state: 'visible' });
+  await page.locator('.board-unit-action-button.tactic').click();
+
+  const target = page.locator('.hex-cell.move-target[data-board-key="hex:1,2"]').first();
+  assert.equal(await target.isVisible(), true, `${viewportName}: controlled Location within two spaces must be selectable for Royal Guard Tactic`);
+  await target.click();
+
+  await page.waitForFunction(() => {
+    const saved = JSON.parse(localStorage.getItem('war-chest-solo-local-v2') || 'null');
+    return saved?.boardUnits?.find((unit) => unit.id === 'u-test-royal-guard')?.hex === '1,2';
+  });
+
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('war-chest-solo-local-v2') || 'null'));
+  assert.equal(saved.players.human.hand.length, 0, `${viewportName}: Royal Guard Tactic must consume the Royal Coin`);
+  assert.equal(saved.players.human.discard.filter((entry) => entry.coin === 'ROYAL' && entry.faceUp).length, 1, `${viewportName}: Royal Coin must be discarded face-up for the Tactic`);
+}
+
 try {
   const mobileContext = await browser.newContext({
     viewport: { width: 390, height: 844 },
@@ -271,6 +335,7 @@ try {
   await assertMoveIsAtomic(page, 'mobile');
   await assertBerserkerFollowUpIsImmediate(page, 'mobile');
   await assertWarriorPriestDrawVisible(page, 'mobile');
+  await assertRoyalGuardTacticSelectable(page, 'mobile');
   await mobileContext.close();
 
   const desktopContext = await browser.newContext({ viewport: { width: 1440, height: 900 } });
@@ -284,6 +349,7 @@ try {
   await assertMoveIsAtomic(desktopPage, 'desktop');
   await assertBerserkerFollowUpIsImmediate(desktopPage, 'desktop');
   await assertWarriorPriestDrawVisible(desktopPage, 'desktop');
+  await assertRoyalGuardTacticSelectable(desktopPage, 'desktop');
   assert.equal(await desktopPage.locator('.mobile-bot-last-action').count(), 0, 'mobile-only bot summary must stay off desktop');
   await desktopContext.close();
 
