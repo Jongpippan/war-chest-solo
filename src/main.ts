@@ -656,16 +656,16 @@ function bindUnitInfoInteractions(): void {
       tooltip.classList.add('visible');
       positionTooltip(tooltip, evt as MouseEvent);
     });
-    node.addEventListener('mousemove', (evt) => {
-      if (activeAnchor === node && !tooltip.hidden) positionTooltip(tooltip, evt as MouseEvent);
-    });
+    // Keep the tooltip fixed after it opens. Following every mousemove caused
+    // the card to jitter near viewport edges and amplified SVG enter/leave noise.
     node.addEventListener('mouseleave', () => {
       cancelHide();
       // SVG hit-testing can briefly report a leave while crossing child paths.
-      // A tiny grace period prevents the info card/cursor from flashing.
+      // Give the same anchor enough time to receive the matching re-enter before
+      // hiding; the re-enter handler above cancels this timer.
       hideTimer = window.setTimeout(() => {
         if (!node.matches(':hover')) hide();
-      }, 45);
+      }, 140);
     });
   });
 }
