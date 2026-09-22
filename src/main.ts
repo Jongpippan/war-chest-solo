@@ -619,28 +619,54 @@ function positionTooltip(tooltip: HTMLElement, evt: MouseEvent): void {
 function bindUnitInfoInteractions(): void {
   const tooltip = document.querySelector<HTMLElement>('#unitTooltip');
   if (!tooltip) return;
+
+  let activeAnchor: Element | null = null;
+  let hideTimer: number | null = null;
+
+  const cancelHide = () => {
+    if (hideTimer !== null) {
+      window.clearTimeout(hideTimer);
+      hideTimer = null;
+    }
+  };
   const hide = () => {
+    cancelHide();
+    activeAnchor = null;
     tooltip.classList.remove('visible');
     tooltip.hidden = true;
   };
-  document.querySelectorAll('[data-unit-type]').forEach((node) => {
+
+  document.querySelectorAll<HTMLElement>('[data-unit-type]').forEach((node) => {
     node.addEventListener('mouseenter', (evt) => {
+      cancelHide();
       const el = evt.currentTarget as HTMLElement;
-      const coin = (el.dataset.unitType ?? 'ROYAL') as UnitInfoKey;
-      tooltip.innerHTML = renderUnitTooltip(coin, {
-        owner: el.dataset.ownerLabel,
-        stack: el.dataset.stack,
-        supply: el.dataset.supply,
-        board: el.dataset.board,
-        removed: el.dataset.removed,
-        location: el.dataset.location,
-      });
+      if (activeAnchor !== el) {
+        const coin = (el.dataset.unitType ?? 'ROYAL') as UnitInfoKey;
+        tooltip.innerHTML = renderUnitTooltip(coin, {
+          owner: el.dataset.ownerLabel,
+          stack: el.dataset.stack,
+          supply: el.dataset.supply,
+          board: el.dataset.board,
+          removed: el.dataset.removed,
+          location: el.dataset.location,
+        });
+        activeAnchor = el;
+      }
       tooltip.hidden = false;
       tooltip.classList.add('visible');
       positionTooltip(tooltip, evt as MouseEvent);
     });
-    node.addEventListener('mousemove', (evt) => positionTooltip(tooltip, evt as MouseEvent));
-    node.addEventListener('mouseleave', hide);
+    node.addEventListener('mousemove', (evt) => {
+      if (activeAnchor === node && !tooltip.hidden) positionTooltip(tooltip, evt as MouseEvent);
+    });
+    node.addEventListener('mouseleave', () => {
+      cancelHide();
+      // SVG hit-testing can briefly report a leave while crossing child paths.
+      // A tiny grace period prevents the info card/cursor from flashing.
+      hideTimer = window.setTimeout(() => {
+        if (!node.matches(':hover')) hide();
+      }, 45);
+    });
   });
 }
 
@@ -1095,12 +1121,12 @@ function renderInteractionHud(actions: ActionCandidate[]): string {
   const royalGuardCopy = coin !== 'ROYAL'
     ? null
     : !royalGuard
-      ? 'ROYAL COIN: Royal Guard is not deployed, so its Tactic is unavailable.'
+      ? 'ROYAL COIN: 보드에 Royal Guard가 없어 전술을 사용할 수 없습니다.'
       : royalGuardTactics.length === 0
-        ? 'ROYAL GUARD: no reachable empty controlled Location is within 2 spaces. Every step of the move must also be empty.'
+        ? 'ROYAL GUARD: 2칸 안에 도달 가능한 빈 내 Location이 없습니다. 이동 중 거치는 칸도 비어 있어야 합니다.'
         : selectedRoyalGuard
-          ? 'ROYAL GUARD: choose one of the highlighted controlled Locations within 2 spaces.'
-          : 'ROYAL COIN: select your Royal Guard, then choose a highlighted controlled Location within 2 spaces.';
+          ? 'ROYAL GUARD: 강조된 내 Location을 선택하세요.'
+          : 'ROYAL COIN: Royal Guard를 선택하세요. 도착지는 2칸 안의 내가 지배하는 Location이어야 합니다.';
   const stepCopy = state.pending?.kind === 'BERSERKER_EXTRA'
     ? 'BERSERKER: choose a highlighted Move, Attack or Control. Using it removes 1 Coin from the Berserker stack.'
     : state.forcedCoin?.player === 'human'
@@ -1111,7 +1137,7 @@ function renderInteractionHud(actions: ActionCandidate[]): string {
           : 'Select a Coin, then use highlighted Units, Locations and hexes directly.');
   return `<div class="interaction-hud compact-hud">
     <div class="selected-coin-hud">${coin && info ? `<span class="table-coin front static" style="--coin-accent:${info.accent}" data-unit-type="${coin}"><span class="table-coin-inner">${unitIconSvg(coin)}</span></span><div><small>SELECTED COIN</small><strong>${esc(coinLabel(coin))}</strong></div>` : '<div><small>SELECTED COIN</small><strong>NONE</strong></div>'}</div>
-    <div class="interaction-copy"><strong>Battlefield input</strong><span>${stepCopy}</span><div class="interaction-legend">${gameTerm('Deploy')} · ${gameTerm('Maneuver')} · ${gameTerm('Bolster')} · ${gameTerm('Tactic')} · ${gameTerm('Control')}</div></div>
+    <div class="interaction-copy${royalGuardCopy ? ' royal-guard-guide' : ''}"><strong>Battlefield input</strong><span>${stepCopy}</span><div class="interaction-legend">${gameTerm('Deploy')} · ${gameTerm('Maneuver')} · ${gameTerm('Bolster')} · ${gameTerm('Tactic')} · ${gameTerm('Control')}</div></div>
     <div class="face-down-guide"><span>Supply → ${gameTerm('Recruit')}</span><span>Initiative → ${gameTerm('Claim Initiative')}</span><span>Discard → ${gameTerm('Pass')}</span></div>
     <div class="interaction-hud-actions">${boardPath.length ? '<button type="button" id="cancelBoardPath" class="micro-action">Cancel</button>' : ''}${skip ? '<button type="button" id="skipAbilityBtn" class="micro-action">Skip Ability</button>' : ''}</div>
   </div>`;
@@ -1212,7 +1238,7 @@ function renderBoardSvg(actions: ActionCandidate[] = []): string {
         : isLocation
           ? '#ead9a9'
           : '#e9d8b3';
-    const locationTone = controller === 'human' ? '#237b83' : controller === 'bot' ? '#ad4d58' : '#7f9f56';
+    const locationTone = controller === 'human' ? '#237b83' : controller === 'bot' ? '#ad4d58' : '#93866f';
     const locationMark = isLocation
       ? `<g class="location-emblem ${controller ? 'controlled' : 'neutral'} ${controller ?? ''}">
           <circle cx="${x}" cy="${y}" r="24" fill="rgba(255,252,239,.92)" stroke="${locationTone}" stroke-width="3.5"/>
@@ -1230,10 +1256,10 @@ function renderBoardSvg(actions: ActionCandidate[] = []): string {
       const d = UNIT_DEFS[unit.type];
       const ownerFill = unit.owner === 'human' ? '#275e67' : '#853f47';
       const unitKey = `unit:${unit.id}`;
-      const unitCls = boardTargetClass(unitKey, ui);
       const royalGuardSelectable = selectedHumanCoin() === 'ROYAL'
         && unit.owner === 'human'
         && unit.type === 'ROYAL_GUARD';
+      const unitCls = `${boardTargetClass(unitKey, ui)} ${royalGuardSelectable && !ui.nextKeys.has(unitKey) ? 'royal-guard-selectable' : ''}`;
       const unitSelectable = ui.nextKeys.has(unitKey)
         || (unit.owner === 'human' && ui.selectedKeys.has(unitKey))
         || royalGuardSelectable;
