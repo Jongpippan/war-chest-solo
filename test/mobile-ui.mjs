@@ -230,8 +230,8 @@ async function assertWarriorPriestDrawVisible(page, viewportName) {
 }
 
 
-async function seedRoyalGuardGame(page) {
-  await page.evaluate(async () => {
+async function seedRoyalGuardGame(page, guardHex = '0,2') {
+  await page.evaluate(async (selectedGuardHex) => {
     const { createGame } = await import('./dist/engine.js');
     const { UNIT_DEFS } = await import('./dist/data.js');
     const state = createGame(
@@ -255,10 +255,10 @@ async function seedRoyalGuardGame(page) {
     for (const type of state.players.bot.units) state.players.bot.supply[type] = UNIT_DEFS[type].coinCount;
 
     state.boardUnits = [
-      { id: 'u-test-royal-guard', owner: 'human', type: 'ROYAL_GUARD', hex: '0,2', strength: 1 },
+      { id: 'u-test-royal-guard', owner: 'human', type: 'ROYAL_GUARD', hex: selectedGuardHex, strength: 1 },
     ];
     localStorage.setItem('war-chest-solo-local-v2', JSON.stringify(state));
-  });
+  }, guardHex);
   await page.reload({ waitUntil: 'networkidle' });
   await page.locator('#resumeBtn').click();
   await page.waitForSelector('.battlefield');
@@ -276,9 +276,9 @@ async function assertRoyalGuardTacticSelectable(page, viewportName) {
   assert.equal(await guard.isVisible(), true, `${viewportName}: Royal Guard must be selectable while Royal Coin is selected`);
   await guard.click();
 
-  await page.waitForSelector('.board-unit-action-button.tactic', { state: 'visible' });
-  await page.locator('.board-unit-action-button.tactic').click();
-
+  // Royal Coin has only one Unit-specific face-up use, so selecting the Guard
+  // should go directly to destination selection without a redundant Tactic chip.
+  assert.equal(await page.locator('.board-unit-action-button.tactic').count(), 0, `${viewportName}: Royal Guard should not require a second Tactic-button click`);
   const target = page.locator('.hex-cell.move-target[data-board-key="hex:1,2"]').first();
   assert.equal(await target.isVisible(), true, `${viewportName}: controlled Location within two spaces must be selectable for Royal Guard Tactic`);
   await target.click();
@@ -291,6 +291,23 @@ async function assertRoyalGuardTacticSelectable(page, viewportName) {
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('war-chest-solo-local-v2') || 'null'));
   assert.equal(saved.players.human.hand.length, 0, `${viewportName}: Royal Guard Tactic must consume the Royal Coin`);
   assert.equal(saved.players.human.discard.filter((entry) => entry.coin === 'ROYAL' && entry.faceUp).length, 1, `${viewportName}: Royal Coin must be discarded face-up for the Tactic`);
+}
+
+
+async function assertRoyalGuardUnavailableReason(page, viewportName) {
+  // From the centre, the two starting controlled Locations are 3 spaces away.
+  // The Guard must still be selectable so the UI explains why the Tactic cannot fire.
+  await seedRoyalGuardGame(page, '0,0');
+  await page.locator('.hand-zone [data-hand-index][data-unit-type="ROYAL"]').first().click();
+
+  const guard = page.locator('.unit-token[data-unit-type="ROYAL_GUARD"][data-board-key]').first();
+  assert.equal(await guard.isVisible(), true, `${viewportName}: Royal Guard must stay selectable even with no legal destination`);
+  await guard.click();
+
+  assert.equal(await page.locator('.unit-token.interaction-selected[data-unit-type="ROYAL_GUARD"]').count(), 1, `${viewportName}: unavailable Royal Guard Tactic should still select the piece`);
+  const copy = await page.locator('.interaction-copy').textContent();
+  assert.match(copy ?? '', /no reachable empty controlled Location/i, `${viewportName}: UI must explain why Royal Guard Tactic is unavailable`);
+  assert.equal(await page.locator('.hex-cell.move-target[data-board-key^="hex:"]').count(), 0, `${viewportName}: no illegal Royal Guard destination may be highlighted`);
 }
 
 try {
@@ -336,6 +353,7 @@ try {
   await assertBerserkerFollowUpIsImmediate(page, 'mobile');
   await assertWarriorPriestDrawVisible(page, 'mobile');
   await assertRoyalGuardTacticSelectable(page, 'mobile');
+  await assertRoyalGuardUnavailableReason(page, 'mobile');
   await mobileContext.close();
 
   const desktopContext = await browser.newContext({ viewport: { width: 1440, height: 900 } });
@@ -350,6 +368,7 @@ try {
   await assertBerserkerFollowUpIsImmediate(desktopPage, 'desktop');
   await assertWarriorPriestDrawVisible(desktopPage, 'desktop');
   await assertRoyalGuardTacticSelectable(desktopPage, 'desktop');
+  await assertRoyalGuardUnavailableReason(desktopPage, 'desktop');
   assert.equal(await desktopPage.locator('.mobile-bot-last-action').count(), 0, 'mobile-only bot summary must stay off desktop');
   await desktopContext.close();
 
