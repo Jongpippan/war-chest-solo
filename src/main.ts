@@ -888,7 +888,10 @@ function actionInteractionPaths(action: ActionCandidate): string[][] {
     case 'TACTIC_LANCER': return unit && dest && target ? [[unit, 'special:TACTIC', dest, target]] : [];
     case 'TACTIC_ENSIGN': return unit && granted && dest ? [[unit, 'special:TACTIC', granted, dest]] : [];
     case 'TACTIC_LIGHT_CAVALRY': return unit && dest ? [[unit, 'special:TACTIC', dest]] : [];
-    case 'TACTIC_ROYAL_GUARD': return unit && dest ? [[unit, 'special:TACTIC', dest]] : [];
+    // Royal Coin has only one face-up Unit ability. Selecting the Royal Guard
+    // should enter its destination selection directly rather than requiring an
+    // extra Tactic chip click.
+    case 'TACTIC_ROYAL_GUARD': return unit && dest ? [[unit, dest]] : [];
     case 'TACTIC_MARSHALL': return unit && granted && target ? [[unit, 'special:TACTIC', granted, target]] : [];
     case 'TACTIC_FOOTMAN': {
       if (!state) return [];
@@ -996,11 +999,18 @@ async function executeHumanAction(action: ActionCandidate): Promise<void> {
 }
 
 function handleBoardKey(key: string, actions: ActionCandidate[]): void {
-  // Clicking the currently selected Unit again only toggles its compact
-  // Bolster / Tactic / Control popover. The Unit remains selected so normal
-  // Move / Attack targets stay highlighted and clickable.
+  // Royal Coin has a single Unit-specific use. A selected Royal Guard toggles
+  // off on a second click; other Units keep their compact action-chip toggle.
   if (boardPath.length === 1 && boardPath[0] === key && key.startsWith('unit:')) {
     const unitId = key.slice(5);
+    const unit = state?.boardUnits.find((candidate) => candidate.id === unitId);
+    if (selectedHumanCoin() === 'ROYAL' && unit?.owner === 'human' && unit.type === 'ROYAL_GUARD') {
+      boardPath = [];
+      previewHexes.clear();
+      collapsedUnitActionsFor = null;
+      renderGame();
+      return;
+    }
     collapsedUnitActionsFor = collapsedUnitActionsFor === unitId ? null : unitId;
     renderGame();
     return;
@@ -1012,7 +1022,22 @@ function handleBoardKey(key: string, actions: ActionCandidate[]): void {
     nextPath = [key];
     matches = entries.filter((entry) => isPathPrefix(nextPath, entry.path));
   }
-  if (!matches.length) return;
+  if (!matches.length) {
+    // Even when no legal Royal Guard destination exists, let the player select
+    // the Guard so the UI can explain why the Royal Coin tactic is unavailable
+    // instead of making the piece look broken/unresponsive.
+    if (state && selectedHumanCoin() === 'ROYAL' && key.startsWith('unit:')) {
+      const unitId = key.slice(5);
+      const unit = state.boardUnits.find((candidate) => candidate.id === unitId);
+      if (unit?.owner === 'human' && unit.type === 'ROYAL_GUARD') {
+        boardPath = [key];
+        previewHexes.clear();
+        collapsedUnitActionsFor = null;
+        renderGame();
+      }
+    }
+    return;
+  }
   const complete = matches.find((entry) => entry.path.length === nextPath.length);
   const hasLonger = matches.some((entry) => entry.path.length > nextPath.length);
   if (complete && !hasLonger) {
@@ -1056,13 +1081,34 @@ function renderInteractionHud(actions: ActionCandidate[]): string {
   const coin = selectedHumanCoin();
   const info = coin ? infoForCoin(coin) : null;
   const skip = actions.find((a) => a.kind === 'SKIP_ABILITY');
+  const royalGuard = coin === 'ROYAL'
+    ? state.boardUnits.find((unit) => unit.owner === 'human' && unit.type === 'ROYAL_GUARD')
+    : undefined;
+  const royalGuardTactics = coin === 'ROYAL'
+    ? actions.filter((action) => action.kind === 'TACTIC_ROYAL_GUARD')
+    : [];
+  const selectedRoyalGuard = Boolean(
+    royalGuard
+    && boardPath.length === 1
+    && boardPath[0] === `unit:${royalGuard.id}`,
+  );
+  const royalGuardCopy = coin !== 'ROYAL'
+    ? null
+    : !royalGuard
+      ? 'ROYAL COIN: Royal Guard is not deployed, so its Tactic is unavailable.'
+      : royalGuardTactics.length === 0
+        ? 'ROYAL GUARD: no reachable empty controlled Location is within 2 spaces. Every step of the move must also be empty.'
+        : selectedRoyalGuard
+          ? 'ROYAL GUARD: choose one of the highlighted controlled Locations within 2 spaces.'
+          : 'ROYAL COIN: select your Royal Guard, then choose a highlighted controlled Location within 2 spaces.';
   const stepCopy = state.pending?.kind === 'BERSERKER_EXTRA'
     ? 'BERSERKER: choose a highlighted Move, Attack or Control. Using it removes 1 Coin from the Berserker stack.'
     : state.forcedCoin?.player === 'human'
       ? 'WARRIOR PRIEST: the +1 drawn Coin is forced. Use the highlighted actions for that Coin now.'
-      : boardPath.length
-        ? 'Continue by choosing the highlighted Unit or hex.'
-        : 'Select a Coin, then use highlighted Units, Locations and hexes directly.';
+      : royalGuardCopy
+        ?? (boardPath.length
+          ? 'Continue by choosing the highlighted Unit or hex.'
+          : 'Select a Coin, then use highlighted Units, Locations and hexes directly.');
   return `<div class="interaction-hud compact-hud">
     <div class="selected-coin-hud">${coin && info ? `<span class="table-coin front static" style="--coin-accent:${info.accent}" data-unit-type="${coin}"><span class="table-coin-inner">${unitIconSvg(coin)}</span></span><div><small>SELECTED COIN</small><strong>${esc(coinLabel(coin))}</strong></div>` : '<div><small>SELECTED COIN</small><strong>NONE</strong></div>'}</div>
     <div class="interaction-copy"><strong>Battlefield input</strong><span>${stepCopy}</span><div class="interaction-legend">${gameTerm('Deploy')} · ${gameTerm('Maneuver')} · ${gameTerm('Bolster')} · ${gameTerm('Tactic')} · ${gameTerm('Control')}</div></div>
@@ -1185,7 +1231,12 @@ function renderBoardSvg(actions: ActionCandidate[] = []): string {
       const ownerFill = unit.owner === 'human' ? '#275e67' : '#853f47';
       const unitKey = `unit:${unit.id}`;
       const unitCls = boardTargetClass(unitKey, ui);
-      const unitSelectable = ui.nextKeys.has(unitKey) || (unit.owner === 'human' && ui.selectedKeys.has(unitKey));
+      const royalGuardSelectable = selectedHumanCoin() === 'ROYAL'
+        && unit.owner === 'human'
+        && unit.type === 'ROYAL_GUARD';
+      const unitSelectable = ui.nextKeys.has(unitKey)
+        || (unit.owner === 'human' && ui.selectedKeys.has(unitKey))
+        || royalGuardSelectable;
       const unitAttr = unitSelectable ? ` data-board-key="${unitKey}" role="button"` : '';
       unitLayer.push(`<g class="token unit-token ${unitCls} ${actionAnimating && actionAnimation?.unitId === unit.id && actionAnimation.fromHex && actionAnimation.toHex && actionAnimation.fromHex !== actionAnimation.toHex ? 'animation-hidden' : ''}"${unitAttr} data-unit-type="${unit.type}" data-owner-label="${unit.owner === 'human' ? 'Your Unit' : 'Bot Unit'}" data-stack="${unit.strength}" data-location="${coordinateLabel(id)}">
         <circle cx="${x}" cy="${y + 3}" r="34" fill="rgba(0,0,0,.2)"/>
