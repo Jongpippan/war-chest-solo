@@ -136,8 +136,12 @@
     box-shadow: 0 5px 14px rgba(39, 27, 17, .32);
   }
 
-  /* Touch info card: the next tap anywhere outside gameplay dismisses it and is
-     consumed so the element behind it cannot also activate. */
+}
+
+/* The modal-style Unit info card is a touch behavior, not a narrow-layout
+   behavior. On a narrow desktop mouse, it must remain pointer-transparent so
+   hovering the Unit cannot oscillate between the token and the tooltip. */
+@media (hover: none) and (pointer: coarse) {
   .unit-tooltip.visible:not([hidden]) {
     left: 50% !important;
     top: 50% !important;
