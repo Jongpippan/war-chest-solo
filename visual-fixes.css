@@ -320,3 +320,59 @@ small,
   .forced-draw-copy small { font-size: 6px; }
   .forced-draw-copy b { font-size: 8px; }
 }
+
+
+/* v0.14 Royal Guard clarity + stable hover */
+.unit-tooltip,
+.unit-tooltip * {
+  pointer-events: none !important;
+}
+.unit-tooltip {
+  contain: layout paint;
+}
+
+/* Neutral Locations are board objectives, not owned spaces. Keep them visually
+   distinct from the teal/red faction control colors. */
+.location-emblem.neutral circle:first-child {
+  fill: rgba(238, 226, 202, .98) !important;
+  stroke: #93866f !important;
+  stroke-dasharray: 4 3;
+}
+.location-emblem.neutral circle:nth-child(2) {
+  fill: #93866f !important;
+  opacity: .08 !important;
+}
+.location-control-outline.neutral {
+  stroke: #93866f !important;
+  stroke-dasharray: 5 4;
+  filter: drop-shadow(0 0 3px rgba(86, 75, 58, .24)) !important;
+}
+
+/* Royal Coin may select Royal Guard even when there is no legal destination,
+   so the player can see the reason. Keep that affordance visibly clickable. */
+.unit-token.royal-guard-selectable {
+  cursor: pointer !important;
+}
+.unit-token.royal-guard-selectable:not(.interaction-selected) > circle:nth-of-type(2) {
+  stroke: #e3bd62 !important;
+  stroke-width: 3.5 !important;
+  filter: drop-shadow(0 0 7px rgba(227, 189, 98, .5));
+}
+
+@media (max-width: 760px) {
+  /* General helper copy stays compact on mobile, but Royal Guard availability
+     is rules-critical and must remain visible. */
+  .interaction-copy.royal-guard-guide {
+    grid-column: 1 / -1;
+    min-width: 0;
+    padding-top: 2px;
+  }
+  .interaction-copy.royal-guard-guide > span {
+    display: block !important;
+    margin-top: 2px;
+    font-size: 8px;
+    line-height: 1.35;
+    color: #f1dfb7;
+    white-space: normal !important;
+  }
+}
