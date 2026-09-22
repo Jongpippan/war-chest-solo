@@ -1,4 +1,5 @@
 const MOBILE_QUERY = '(max-width: 760px), (hover: none) and (pointer: coarse)';
+const TOUCH_QUERY = '(hover: none) and (pointer: coarse)';
 const STORAGE_KEY = 'war-chest-solo-local-v2';
 const GENERATED_ATTR = 'data-responsive-ui-generated';
 const LAST_BOT_ACTION_KEY = 'war-chest-solo-last-bot-action-v1';
@@ -10,10 +11,15 @@ type StoredGameState = {
 };
 
 let tooltipVisibleAtPointerDown = false;
+let touchPointerDown = false;
 let syncQueued = false;
 
 function isMobileUi(): boolean {
   return window.matchMedia(MOBILE_QUERY).matches;
+}
+
+function isTouchUi(): boolean {
+  return window.matchMedia(TOUCH_QUERY).matches;
 }
 
 function visibleUnitTooltip(): HTMLElement | null {
@@ -32,7 +38,9 @@ function isGameplayActionTarget(target: EventTarget | null): boolean {
 }
 
 function onMouseEnterCapture(event: MouseEvent): void {
-  if (!isMobileUi()) return;
+  // A narrow desktop window is still a mouse UI. Only suppress synthesized
+  // hover on an actual coarse/touch pointer.
+  if (!isTouchUi()) return;
   const target = event.target;
   if (!(target instanceof Element)) return;
   if (!target.closest('.unit-token[data-board-key]')) return;
@@ -44,7 +52,11 @@ function onMouseEnterCapture(event: MouseEvent): void {
 }
 
 function onPointerDownCapture(event: PointerEvent): void {
-  if (!isMobileUi()) return;
+  touchPointerDown = event.pointerType === 'touch' || isTouchUi();
+  if (!touchPointerDown) {
+    tooltipVisibleAtPointerDown = false;
+    return;
+  }
   tooltipVisibleAtPointerDown = Boolean(visibleUnitTooltip());
 
   // Setup cards consume the next tap while their info card is open, but a tap
@@ -53,16 +65,20 @@ function onPointerDownCapture(event: PointerEvent): void {
 }
 
 function onClickCapture(event: MouseEvent): void {
-  if (!isMobileUi()) return;
+  // Do not apply touch-style click swallowing merely because the viewport is
+  // narrow. That caused mouse hover/cursor behavior to fight the responsive UI.
+  if (!touchPointerDown && !isTouchUi()) return;
 
   if (isGameplayActionTarget(event.target)) {
     tooltipVisibleAtPointerDown = false;
+    touchPointerDown = false;
     closeUnitTooltip();
     return;
   }
 
   const shouldDismissTooltip = tooltipVisibleAtPointerDown && Boolean(visibleUnitTooltip());
   tooltipVisibleAtPointerDown = false;
+  touchPointerDown = false;
   if (!shouldDismissTooltip) return;
 
   event.preventDefault();
